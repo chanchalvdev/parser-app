@@ -1,0 +1,14 @@
+/.env
+/.env.local
+/backend/bin
+/backend/vendor
+/backend/.cache
+/worker/.venv
+/worker/__pycache__
+/worker/.pytest_cache
+/frontend/node_modules
+/frontend/dist
+/tmp
+/.idea
+/.vscode
+

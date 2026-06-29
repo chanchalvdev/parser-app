@@ -1,0 +1,3 @@
+{"event":"request","user":"alice","ip":"198.51.100.12","email":"alice@example.com"}
+{"event":"request","user":"bob","ip":"203.0.113.44","email":"bob@example.net"}
+{"event":"request","user":"carol","ip":"192.0.2.1","email":"carol@acme.io"}

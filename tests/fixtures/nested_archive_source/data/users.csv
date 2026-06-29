@@ -1,0 +1,4 @@
+user,role,team,domain
+alice,admin,blue,example.com
+bob,analyst,red,acme.io
+carol,viewer,green,security.local
