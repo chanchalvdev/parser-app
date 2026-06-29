@@ -1,0 +1,3 @@
+Sample ingestion text file
+Created for parser fixture tests.
+Contains plain text lines.

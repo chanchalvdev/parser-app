@@ -1,0 +1,2 @@
+2026-06-15T13:00:00Z INFO nested-service booting
+2026-06-15T13:01:00Z WARN nested-service retrying upstream ip=198.51.100.55

@@ -1,0 +1,1497 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Enterprise File Platform API",
+    "version": "0.1.0",
+    "description": "Local-first ingestion orchestration and search API for file parsing, job execution, and operational monitoring.",
+    "contact": {
+      "name": "Project Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development API"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "getHealth",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "time": {"type": "string", "format": "date-time"}
+                  }
+                },
+                "example": {
+                  "status": "ok",
+                  "time": "2026-06-16T12:00:00Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Readiness check",
+        "operationId": "getReady",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "Dependencies are ready",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/HealthStatus"},
+                "example": {
+                  "status": "ready"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service or dependency is not ready",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/HealthStatus"},
+                "example": {
+                  "status": "not ready",
+                  "error": "ping database failed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/version": {
+      "get": {
+        "summary": "Get API version",
+        "operationId": "getVersion",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Version metadata",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/VersionResponse"},
+                "example": {
+                  "service": "enterprise-file-platform-api",
+                  "version": "0.1.0",
+                  "environment": "local"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "summary": "Swagger API documentation UI",
+        "operationId": "getSwaggerUI",
+        "tags": ["Docs"],
+        "responses": {
+          "200": {
+            "description": "HTML page with Swagger UI"
+          }
+        }
+      }
+    },
+    "/docs/openapi.json": {
+      "get": {
+        "summary": "OpenAPI JSON for the API",
+        "operationId": "getOpenAPIDoc",
+        "tags": ["Docs"],
+        "responses": {
+          "200": {
+            "description": "OpenAPI schema JSON",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/initiate": {
+      "post": {
+        "summary": "Initiate an upload session",
+        "operationId": "initiateUpload",
+        "tags": ["Uploads"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/UploadInitiateRequest"},
+              "example": {
+                "file_name": "sample.zip",
+                "content_type": "application/zip",
+                "size_bytes": 12345,
+                "password_provided": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload session created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/UploadInitiateResponse"},
+                "example": {
+                  "upload_id": "d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a",
+                  "object_key": "uploads/11111111-1111-1111-1111-111111111001/d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a/sample.zip",
+                  "upload_url": "https://minio.local/upload-presigned-url",
+                  "expires_in_seconds": 3600
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Error"},
+                "example": {"error": "invalid upload request: file_name is required"}
+              }
+            }
+          },
+          "413": {
+            "description": "Upload too large",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Error"},
+                "example": {"error": "upload exceeds max_upload_size_mb"}
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/uploads/complete": {
+      "post": {
+        "summary": "Complete upload and enqueue ingestion job",
+        "operationId": "completeUpload",
+        "tags": ["Uploads"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/UploadCompleteRequest"},
+              "example": {
+                "upload_id": "d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload accepted and job queued",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/UploadCompleteResponse"},
+                "example": {
+                  "upload_id": "d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a",
+                  "file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                  "job_id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                  "status": "queued"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Error"},
+                "example": {"error": "invalid upload request: upload_id is required"}
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/uploads/{upload_id}": {
+      "get": {
+        "summary": "Get upload metadata",
+        "operationId": "getUploadByID",
+        "tags": ["Uploads"],
+        "parameters": [
+          {"name": "upload_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload metadata",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Upload"},
+                "example": {
+                  "id": "d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a",
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "status": "pending",
+                  "original_source": "sample.zip",
+                  "storage_prefix": "uploads/11111111-1111-1111-1111-111111111001/d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a",
+                  "total_files": 1,
+                  "total_size_bytes": 12345,
+                  "metadata": {
+                    "file_name": "sample.zip",
+                    "size_bytes": 12345,
+                    "content_type": "application/zip",
+                    "password_provided": false
+                  },
+                  "created_at": "2026-06-16T11:40:12Z",
+                  "updated_at": "2026-06-16T11:40:13Z"
+                }
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/files": {
+      "get": {
+        "summary": "List files",
+        "operationId": "listFiles",
+        "tags": ["Files"],
+        "parameters": [
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "status", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "processing_status", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "extension", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "detected_file_type", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1}, "example": 1},
+          {"name": "page_size", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25},
+          {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "description": "Deprecated alias for page_size"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated file list",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/FileListResponse"},
+                "example": {
+                  "total": 12,
+                  "page": 1,
+                  "page_size": 25,
+                  "files": [
+                    {
+                      "id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                      "tenant_id": "11111111-1111-1111-1111-111111111001",
+                      "parent_file_id": null,
+                      "upload_id": "d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a",
+                      "original_name": "sample.zip",
+                      "normalized_name": "sample.zip",
+                      "extension": ".zip",
+                      "detected_mime_type": "application/zip",
+                      "detected_file_type": "archive",
+                      "storage_path": "uploads/11111111-1111-1111-1111-111111111001/d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a/sample.zip",
+                      "size_bytes": 12345,
+                      "sha256_hash": null,
+                      "depth": 0,
+                      "is_archive": true,
+                      "is_password_protected": false,
+                      "processing_status": "completed",
+                      "created_at": "2026-06-16T11:40:12Z",
+                      "updated_at": "2026-06-16T11:41:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/files/{file_id}": {
+      "get": {
+        "summary": "Get file details",
+        "operationId": "getFileByID",
+        "tags": ["Files"],
+        "parameters": [
+          {"name": "file_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "File", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/File"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/password": {
+      "post": {
+        "summary": "Submit password for password-protected archive",
+        "operationId": "submitFilePassword",
+        "tags": ["Files", "Security"],
+        "parameters": [
+          {"name": "file_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/SubmitFilePasswordRequest"},
+              "example": {"password": "change-me"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password submitted and job requeued",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SubmitFilePasswordResponse"},
+                "example": {
+                  "file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                  "job_id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                  "status": "queued"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad password request",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Error"},
+                "example": {"error": "invalid file password request: password is required"}
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/children": {
+      "get": {
+        "summary": "List direct file children",
+        "operationId": "listFileChildren",
+        "tags": ["Files"],
+        "parameters": [
+          {"name": "file_id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1}, "example": 1},
+          {"name": "page_size", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated direct children",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/FileChildrenResponse"},
+                "example": {
+                  "file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                  "total": 3,
+                  "page": 1,
+                  "page_size": 25,
+                  "children": []
+                }
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/tree": {
+      "get": {
+        "summary": "Get recursive file tree rooted at a file",
+        "operationId": "getFileTree",
+        "tags": ["Files"],
+        "parameters": [
+          {"name": "file_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Nested file tree",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/FileTreeNode"},
+                "example": {
+                  "file": {
+                    "id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                    "tenant_id": "11111111-1111-1111-1111-111111111001",
+                    "original_name": "sample.zip",
+                    "size_bytes": 12345,
+                    "extension": ".zip",
+                    "detected_file_type": "archive",
+                    "storage_path": "uploads/11111111-1111-1111-1111-111111111001/d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a/sample.zip",
+                    "depth": 0,
+                    "is_archive": true,
+                    "processing_status": "completed",
+                    "created_at": "2026-06-16T11:40:12Z",
+                    "updated_at": "2026-06-16T11:41:00Z"
+                  },
+                  "children": []
+                }
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/records": {
+      "get": {
+        "summary": "List parsed records for a file",
+        "operationId": "listFileRecords",
+        "tags": ["Files", "Parsed Records"],
+        "parameters": [
+          {"name": "file_id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1}, "example": 1},
+          {"name": "page_size", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated parsed records",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/FileRecordsResponse"},
+                "example": {
+                  "file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                  "total": 10,
+                  "page": 1,
+                  "page_size": 25,
+                  "records": [
+                    {
+                      "id": "9f5b4f0f-f7d8-4b9f-a1c4-2dd7d5a7d111",
+                      "tenant_id": "11111111-1111-1111-1111-111111111001",
+                      "file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                      "job_id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                      "record_type": "text_line",
+                      "line_number": 1,
+                      "content_text": "user=john@example.com ip=198.51.100.12",
+                      "structured_data": {"raw": "user=john@example.com ip=198.51.100.12"},
+                      "extracted_entities": {"emails": ["john@example.com"], "ip_addresses": ["198.51.100.12"]},
+                      "created_at": "2026-06-16T11:41:20Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "summary": "List jobs",
+        "operationId": "listJobs",
+        "tags": ["Jobs"],
+        "parameters": [
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1}, "example": 1},
+          {"name": "page_size", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated jobs",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/JobListResponse"},
+                "example": {
+                  "total": 2,
+                  "page": 1,
+                  "page_size": 25,
+                  "jobs": [
+                    {
+                      "id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                      "tenant_id": "11111111-1111-1111-1111-111111111001",
+                      "root_file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                      "status": "completed",
+                      "current_stage": "completed",
+                      "progress_percent": 100,
+                      "retry_count": 0,
+                      "created_at": "2026-06-16T11:40:13Z",
+                      "updated_at": "2026-06-16T11:41:20Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}": {
+      "get": {
+        "summary": "Get job",
+        "operationId": "getJobByID",
+        "tags": ["Jobs"],
+        "parameters": [
+          {"name": "job_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "Job", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IngestionJob"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/events": {
+      "get": {
+        "summary": "List job events",
+        "operationId": "listJobEvents",
+        "tags": ["Jobs", "Job Events"],
+        "parameters": [
+          {"name": "job_id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1}, "example": 1},
+          {"name": "page_size", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated job events",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/JobEventsResponse"},
+                "example": {
+                  "job_id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                  "total": 2,
+                  "page": 1,
+                  "page_size": 25,
+                  "events": [
+                    {
+                      "id": "9fbbf8f1-3a70-4d3e-9e5a-0f89fcb2a4d7",
+                      "tenant_id": "11111111-1111-1111-1111-111111111001",
+                      "job_id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                      "event_type": "upload.completed",
+                      "event_message": "upload completed and queued for parsing",
+                      "created_at": "2026-06-16T11:40:13Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/retry": {
+      "post": {
+        "summary": "Retry a job by re-queuing it",
+        "operationId": "retryJob",
+        "tags": ["Jobs", "Operations"],
+        "parameters": [
+          {"name": "job_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated job",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/IngestionJob"},
+                "example": {
+                  "id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "root_file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                  "status": "queued",
+                  "current_stage": "queued",
+                  "progress_percent": 0,
+                  "retry_count": 1,
+                  "created_at": "2026-06-16T11:40:13Z",
+                  "updated_at": "2026-06-16T11:42:01Z"
+                }
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "summary": "Search parsed records",
+        "operationId": "searchRecordsGet",
+        "tags": ["Search"],
+        "parameters": [
+          {"name": "q", "in": "query", "required": false, "schema": {"type": "string"}, "description": "Full text query", "example": "authentication"},
+          {"name": "file_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "extension", "in": "query", "required": false, "schema": {"type": "string", "example": "txt"}},
+          {"name": "detected_file_type", "in": "query", "required": false, "schema": {"type": "string", "example": "text"}},
+          {"name": "record_type", "in": "query", "required": false, "schema": {"type": "string", "example": "text_line"}},
+          {"name": "date_from", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "date_to", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "ip", "in": "query", "required": false, "schema": {"type": "string", "format": "ipv4"}},
+          {"name": "email", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "domain", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "job_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1}, "example": 1},
+          {"name": "page_size", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100}, "example": 25},
+          {"name": "sort", "in": "query", "required": false, "schema": {"type": "string", "enum": ["relevance", "created_at"]}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SearchResponse"},
+                "example": {
+                  "total": 1,
+                  "page": 1,
+                  "page_size": 25,
+                  "results": [
+                    {
+                      "record_id": "9f5b4f0f-f7d8-4b9f-a1c4-2dd7d5a7d111",
+                      "file_id": "f6beef3c-8a45-4b89-8a3a-3d6d5b2d7f88",
+                      "job_id": "6d5fbf3a-21f8-4f2f-8bf7-cd6e9f13d9d6",
+                      "source_file_name": "sample.txt",
+                      "record_type": "text_line",
+                      "content_preview": "user=john@example.com ip=198.51.100.12",
+                      "highlight": "<em>john</em>@example.com",
+                      "entities": {"emails": ["john@example.com"], "ip_addresses": ["198.51.100.12"]},
+                      "created_at": "2026-06-16T11:41:20Z"
+                    }
+                  ],
+                  "facets": {
+                    "record_type": [{"value": "text_line", "count": 1}],
+                    "detected_file_type": [{"value": "txt", "count": 1}],
+                    "entities": {
+                      "ip_addresses": [{"value": "198.51.100.12", "count": 1}],
+                      "emails": [{"value": "john@example.com", "count": 1}],
+                      "domains": [{"value": "example.com", "count": 1}],
+                      "urls": [],
+                      "hashes": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      },
+      "post": {
+        "summary": "Search parsed records via request body",
+        "operationId": "searchRecordsPost",
+        "tags": ["Search"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/SearchRecordsRequest"},
+              "example": {
+                "q": "john@example.com",
+                "email": "john@example.com",
+                "page": 1,
+                "page_size": 25,
+                "sort": "created_at"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"$ref": "#/components/responses/SearchResponseRef"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/search/suggestions": {
+      "get": {
+        "summary": "Get filter suggestions/aggregates",
+        "operationId": "getSearchSuggestions",
+        "tags": ["Search"],
+        "parameters": [
+          {"name": "q", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "extension", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "detected_file_type", "in": "query", "required": false, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Suggestion sets",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SearchSuggestionResponse"},
+                "example": {
+                  "suggestions": {
+                    "record_type": [{"value": "text_line", "count": 8}, {"value": "json_object", "count": 2}],
+                    "detected_file_type": [{"value": "txt", "count": 8}, {"value": "csv", "count": 2}],
+                    "entities": {
+                      "ip_addresses": [{"value": "198.51.100.12", "count": 2}],
+                      "emails": [{"value": "john@example.com", "count": 1}],
+                      "domains": [{"value": "example.com", "count": 1}],
+                      "urls": [],
+                      "hashes": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/dashboard/summary": {
+      "get": {
+        "summary": "Get dashboard summary",
+        "operationId": "getDashboardSummary",
+        "tags": ["Dashboard"],
+        "parameters": [{"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}}],
+        "responses": {
+          "200": {
+            "description": "Dashboard summary",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DashboardSummary"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "total_uploads": 3,
+                  "total_files": 12,
+                  "total_extracted_files": 10,
+                  "total_parsed_records": 540,
+                  "completed_jobs": 2,
+                  "failed_jobs": 0,
+                  "password_required_files": 1,
+                  "quarantined_files": 0
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/dashboard/file-types": {
+      "get": {
+        "summary": "Get top detected file types",
+        "operationId": "getFileTypes",
+        "tags": ["Dashboard"],
+        "parameters": [
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "File type distribution",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DashboardDistribution"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "buckets": [{"value": "txt", "count": 6}, {"value": "zip", "count": 3}]
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/dashboard/processing-status": {
+      "get": {
+        "summary": "Get job processing status distribution",
+        "operationId": "getProcessingStatus",
+        "tags": ["Dashboard"],
+        "parameters": [
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "Processing status distribution",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DashboardDistribution"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "buckets": [{"value": "completed", "count": 2}, {"value": "failed", "count": 0}, {"value": "queued", "count": 1}]
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/dashboard/upload-volume": {
+      "get": {
+        "summary": "Get upload/record volume by day",
+        "operationId": "getUploadVolume",
+        "tags": ["Dashboard"],
+        "parameters": [
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "days", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1}, "example": 7}
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload volume series",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DashboardUploadVolume"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "unit": "day",
+                  "days": 7,
+                  "from": "2026-06-10",
+                  "to": "2026-06-16",
+                  "buckets": [{"bucket": "2026-06-16", "uploads": 1, "files": 3, "parsed_records": 120}]
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/dashboard/error-breakdown": {
+      "get": {
+        "summary": "Get failure error-code breakdown",
+        "operationId": "getErrorBreakdown",
+        "tags": ["Dashboard"],
+        "parameters": [
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "Error breakdown",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DashboardErrorBreakdown"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "total": 0,
+                  "errors": []
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/dashboard/entities": {
+      "get": {
+        "summary": "Get top parsed entities",
+        "operationId": "getDashboardEntities",
+        "tags": ["Dashboard"],
+        "parameters": [
+          {"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}},
+          {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 200}, "example": 25}
+        ],
+        "responses": {
+          "200": {
+            "description": "Top extracted entities",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DashboardEntities"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "limit": 25,
+                  "entities": {
+                    "ip_addresses": [{"value": "198.51.100.12", "count": 10}],
+                    "emails": [{"value": "john@example.com", "count": 2}],
+                    "domains": [{"value": "example.com", "count": 2}],
+                    "urls": [],
+                    "hashes": []
+                  }
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/dashboard/processing-duration": {
+      "get": {
+        "summary": "Get processing duration quantiles",
+        "operationId": "getProcessingDuration",
+        "tags": ["Dashboard"],
+        "parameters": [{"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}}],
+        "responses": {
+          "200": {
+            "description": "Duration summary",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DashboardProcessingDuration"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "unit": "seconds",
+                  "completed_jobs": 4,
+                  "average_seconds": 12.8,
+                  "median_seconds": 11.2,
+                  "p95_seconds": 18.7,
+                  "min_seconds": 5.1,
+                  "max_seconds": 22.5
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "summary": "Get tenant settings",
+        "operationId": "getAdminSettings",
+        "tags": ["Admin"],
+        "parameters": [{"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}}],
+        "responses": {
+          "200": {
+            "description": "Tenant settings",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminSettings"},
+                "example": {
+                  "tenant_id": "11111111-1111-1111-1111-111111111001",
+                  "max_upload_size_mb": 512,
+                  "max_archive_depth": 10,
+                  "max_extracted_files": 10000,
+                  "max_extracted_size_mb": 1024,
+                  "txt_small_file_limit_mb": 10,
+                  "max_expansion_ratio": 20,
+                  "enabled_parsers": ["txt", "log", "csv", "json", "jsonl"],
+                  "parser_batch_size": 1000,
+                  "search_index_batch_size": 1000
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      },
+      "put": {
+        "summary": "Update tenant settings",
+        "operationId": "updateAdminSettings",
+        "tags": ["Admin"],
+        "parameters": [{"name": "tenant_id", "in": "query", "required": false, "schema": {"type": "string"}}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/UpdateAdminSettingsRequest"},
+              "example": {"max_upload_size_mb": 1024, "enabled_parsers": ["txt", "csv", "json"]}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated settings",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminSettings"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "403": {
+            "description": "Not authorized",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": "forbidden: insufficient permissions"}}
+            }
+          },
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/Error"},
+            "example": {"error": "invalid request"}
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/Error"},
+            "example": {"error": "resource not found"}
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/Error"},
+            "example": {"error": "internal server error"}
+          }
+        }
+      },
+      "SearchResponseRef": {
+        "description": "Search results",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/SearchResponse"}
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {"type": "string"}
+        },
+        "required": ["error"]
+      },
+      "HealthStatus": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string", "example": "ok"},
+          "error": {"type": "string"}
+        }
+      },
+      "VersionResponse": {
+        "type": "object",
+        "properties": {
+          "service": {"type": "string"},
+          "version": {"type": "string"},
+          "environment": {"type": "string"}
+        }
+      },
+      "UploadInitiateRequest": {
+        "type": "object",
+        "required": ["file_name", "content_type", "size_bytes"],
+        "properties": {
+          "file_name": {"type": "string"},
+          "content_type": {"type": "string"},
+          "size_bytes": {"type": "integer", "format": "int64"},
+          "password_provided": {"type": "boolean"}
+        }
+      },
+      "UploadInitiateResponse": {
+        "type": "object",
+        "properties": {
+          "upload_id": {"type": "string", "format": "uuid"},
+          "object_key": {"type": "string"},
+          "upload_url": {"type": "string", "format": "uri"},
+          "expires_in_seconds": {"type": "integer"}
+        }
+      },
+      "UploadCompleteRequest": {
+        "type": "object",
+        "required": ["upload_id"],
+        "properties": {
+          "upload_id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "UploadCompleteResponse": {
+        "type": "object",
+        "properties": {
+          "upload_id": {"type": "string", "format": "uuid"},
+          "file_id": {"type": "string", "format": "uuid"},
+          "job_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string"}
+        }
+      },
+      "Upload": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "tenant_id": {"type": "string"},
+          "initiated_by": {"type": "string", "nullable": true},
+          "status": {"type": "string"},
+          "original_source": {"type": "string", "nullable": true},
+          "storage_prefix": {"type": "string", "nullable": true},
+          "total_files": {"type": "integer"},
+          "total_size_bytes": {"type": "integer", "format": "int64"},
+          "metadata": {"type": "object", "additionalProperties": true},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "File": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string"},
+          "parent_file_id": {"type": "string", "format": "uuid", "nullable": true},
+          "upload_id": {"type": "string", "format": "uuid", "nullable": true},
+          "original_name": {"type": "string"},
+          "normalized_name": {"type": "string", "nullable": true},
+          "extension": {"type": "string", "nullable": true},
+          "detected_mime_type": {"type": "string", "nullable": true},
+          "detected_file_type": {"type": "string", "nullable": true},
+          "storage_path": {"type": "string"},
+          "size_bytes": {"type": "integer", "format": "int64"},
+          "sha256_hash": {"type": "string", "nullable": true},
+          "depth": {"type": "integer"},
+          "is_archive": {"type": "boolean"},
+          "is_password_protected": {"type": "boolean"},
+          "processing_status": {"type": "string"},
+          "created_by": {"type": "string", "nullable": true},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "FileListResponse": {
+        "type": "object",
+        "properties": {
+          "total": {"type": "integer", "format": "int64"},
+          "page": {"type": "integer"},
+          "page_size": {"type": "integer"},
+          "files": {"type": "array", "items": {"$ref": "#/components/schemas/File"}}
+        }
+      },
+      "FileChildrenResponse": {
+        "type": "object",
+        "properties": {
+          "file_id": {"type": "string", "format": "uuid"},
+          "total": {"type": "integer", "format": "int64"},
+          "page": {"type": "integer"},
+          "page_size": {"type": "integer"},
+          "children": {"type": "array", "items": {"$ref": "#/components/schemas/File"}}
+        }
+      },
+      "ParsedRecord": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string"},
+          "file_id": {"type": "string", "format": "uuid"},
+          "job_id": {"type": "string", "format": "uuid"},
+          "record_type": {"type": "string", "nullable": true},
+          "record_number": {"type": "integer", "format": "int64", "nullable": true},
+          "line_number": {"type": "integer", "format": "int64", "nullable": true},
+          "chunk_number": {"type": "integer", "format": "int64", "nullable": true},
+          "start_line": {"type": "integer", "format": "int64", "nullable": true},
+          "end_line": {"type": "integer", "format": "int64", "nullable": true},
+          "content_text": {"type": "string", "nullable": true},
+          "structured_data": {"type": "object", "additionalProperties": true},
+          "extracted_entities": {"type": "object", "additionalProperties": true},
+          "event_timestamp": {"type": "string", "format": "date-time", "nullable": true},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "FileRecordsResponse": {
+        "type": "object",
+        "properties": {
+          "file_id": {"type": "string", "format": "uuid"},
+          "total": {"type": "integer", "format": "int64"},
+          "page": {"type": "integer"},
+          "page_size": {"type": "integer"},
+          "records": {"type": "array", "items": {"$ref": "#/components/schemas/ParsedRecord"}}
+        }
+      },
+      "FileTreeNode": {
+        "type": "object",
+        "properties": {
+          "file": {"$ref": "#/components/schemas/File"},
+          "children": {"type": "array", "items": {"$ref": "#/components/schemas/FileTreeNode"}}
+        }
+      },
+      "SubmitFilePasswordRequest": {
+        "type": "object",
+        "required": ["password"],
+        "properties": {
+          "password": {"type": "string", "format": "password"}
+        }
+      },
+      "SubmitFilePasswordResponse": {
+        "type": "object",
+        "properties": {
+          "file_id": {"type": "string", "format": "uuid"},
+          "job_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string"}
+        }
+      },
+      "IngestionJob": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string"},
+          "root_file_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string"},
+          "current_stage": {"type": "string", "nullable": true},
+          "progress_percent": {"type": "number", "format": "float"},
+          "retry_count": {"type": "integer"},
+          "error_code": {"type": "string", "nullable": true},
+          "error_message": {"type": "string", "nullable": true},
+          "started_at": {"type": "string", "format": "date-time", "nullable": true},
+          "completed_at": {"type": "string", "format": "date-time", "nullable": true},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "JobListResponse": {
+        "type": "object",
+        "properties": {
+          "total": {"type": "integer", "format": "int64"},
+          "page": {"type": "integer"},
+          "page_size": {"type": "integer"},
+          "jobs": {"type": "array", "items": {"$ref": "#/components/schemas/IngestionJob"}}
+        }
+      },
+      "JobEvent": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string"},
+          "job_id": {"type": "string", "format": "uuid"},
+          "event_type": {"type": "string"},
+          "event_message": {"type": "string", "nullable": true},
+          "event_details": {"type": "object", "additionalProperties": true},
+          "created_by": {"type": "string", "nullable": true},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "JobEventsResponse": {
+        "type": "object",
+        "properties": {
+          "job_id": {"type": "string", "format": "uuid"},
+          "total": {"type": "integer", "format": "int64"},
+          "page": {"type": "integer"},
+          "page_size": {"type": "integer"},
+          "events": {"type": "array", "items": {"$ref": "#/components/schemas/JobEvent"}}
+        }
+      },
+      "SearchRecordsRequest": {
+        "type": "object",
+        "properties": {
+          "q": {"type": "string"},
+          "file_id": {"type": "string"},
+          "extension": {"type": "string"},
+          "detected_file_type": {"type": "string"},
+          "record_type": {"type": "string"},
+          "date_from": {"type": "string", "format": "date-time"},
+          "date_to": {"type": "string", "format": "date-time"},
+          "ip": {"type": "string"},
+          "email": {"type": "string"},
+          "domain": {"type": "string"},
+          "job_id": {"type": "string"},
+          "page": {"type": "integer", "minimum": 1},
+          "page_size": {"type": "integer", "minimum": 1, "maximum": 100},
+          "sort": {"type": "string", "enum": ["relevance", "created_at"]},
+          "tenant_id": {"type": "string"}
+        }
+      },
+      "SearchFacetItem": {
+        "type": "object",
+        "properties": {
+          "value": {"type": "string"},
+          "count": {"type": "integer", "format": "int64"}
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "record_id": {"type": "string", "format": "uuid"},
+          "file_id": {"type": "string", "format": "uuid"},
+          "job_id": {"type": "string", "format": "uuid"},
+          "source_file_name": {"type": "string"},
+          "record_type": {"type": "string"},
+          "content_preview": {"type": "string"},
+          "highlight": {"type": "string"},
+          "entities": {"type": "object", "additionalProperties": true},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "SearchFacets": {
+        "type": "object",
+        "properties": {
+          "record_type": {"type": "array", "items": {"$ref": "#/components/schemas/SearchFacetItem"}},
+          "detected_file_type": {"type": "array", "items": {"$ref": "#/components/schemas/SearchFacetItem"}},
+          "entities": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {"$ref": "#/components/schemas/SearchFacetItem"}
+            }
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "total": {"type": "integer", "format": "int64"},
+          "page": {"type": "integer"},
+          "page_size": {"type": "integer"},
+          "results": {"type": "array", "items": {"$ref": "#/components/schemas/SearchResult"}},
+          "facets": {"$ref": "#/components/schemas/SearchFacets"}
+        }
+      },
+      "SearchSuggestionResponse": {
+        "type": "object",
+        "properties": {
+          "suggestions": {
+            "type": "object",
+            "properties": {
+              "record_type": {"type": "array", "items": {"$ref": "#/components/schemas/SearchFacetItem"}},
+              "detected_file_type": {"type": "array", "items": {"$ref": "#/components/schemas/SearchFacetItem"}},
+              "entities": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/SearchFacetItem"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "DashboardSummary": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "total_uploads": {"type": "integer", "format": "int64"},
+          "total_files": {"type": "integer", "format": "int64"},
+          "total_extracted_files": {"type": "integer", "format": "int64"},
+          "total_parsed_records": {"type": "integer", "format": "int64"},
+          "completed_jobs": {"type": "integer", "format": "int64"},
+          "failed_jobs": {"type": "integer", "format": "int64"},
+          "password_required_files": {"type": "integer", "format": "int64"},
+          "quarantined_files": {"type": "integer", "format": "int64"}
+        }
+      },
+      "DashboardBucket": {
+        "type": "object",
+        "properties": {
+          "value": {"type": "string"},
+          "count": {"type": "integer", "format": "int64"}
+        }
+      },
+      "DashboardDistribution": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "buckets": {"type": "array", "items": {"$ref": "#/components/schemas/DashboardBucket"}}
+        }
+      },
+      "UploadVolumeBucket": {
+        "type": "object",
+        "properties": {
+          "bucket": {"type": "string"},
+          "uploads": {"type": "integer", "format": "int64"},
+          "files": {"type": "integer", "format": "int64"},
+          "parsed_records": {"type": "integer", "format": "int64"}
+        }
+      },
+      "DashboardUploadVolume": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "unit": {"type": "string"},
+          "days": {"type": "integer"},
+          "from": {"type": "string"},
+          "to": {"type": "string"},
+          "buckets": {"type": "array", "items": {"$ref": "#/components/schemas/UploadVolumeBucket"}}
+        }
+      },
+      "DashboardErrorItem": {
+        "type": "object",
+        "properties": {
+          "error_code": {"type": "string"},
+          "count": {"type": "integer", "format": "int64"},
+          "last_seen": {"type": "string", "format": "date-time"}
+        }
+      },
+      "DashboardErrorBreakdown": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "total": {"type": "integer", "format": "int64"},
+          "errors": {"type": "array", "items": {"$ref": "#/components/schemas/DashboardErrorItem"}}
+        }
+      },
+      "DashboardEntities": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "limit": {"type": "integer"},
+          "entities": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {"$ref": "#/components/schemas/DashboardBucket"}
+            }
+          }
+        }
+      },
+      "DashboardProcessingDuration": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "unit": {"type": "string"},
+          "completed_jobs": {"type": "integer", "format": "int64"},
+          "average_seconds": {"type": "number", "format": "double"},
+          "median_seconds": {"type": "number", "format": "double"},
+          "p95_seconds": {"type": "number", "format": "double"},
+          "min_seconds": {"type": "number", "format": "double"},
+          "max_seconds": {"type": "number", "format": "double"}
+        }
+      },
+      "AdminSettings": {
+        "type": "object",
+        "properties": {
+          "tenant_id": {"type": "string"},
+          "max_upload_size_mb": {"type": "number"},
+          "max_archive_depth": {"type": "integer", "format": "int64"},
+          "max_extracted_files": {"type": "integer", "format": "int64"},
+          "max_extracted_size_mb": {"type": "integer", "format": "int64"},
+          "txt_small_file_limit_mb": {"type": "number"},
+          "max_expansion_ratio": {"type": "number"},
+          "enabled_parsers": {"type": "array", "items": {"type": "string"}},
+          "parser_batch_size": {"type": "integer", "format": "int64"},
+          "search_index_batch_size": {"type": "integer", "format": "int64"}
+        }
+      },
+      "UpdateAdminSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "max_upload_size_mb": {"type": "number"},
+          "max_archive_depth": {"type": "integer", "format": "int64"},
+          "max_extracted_files": {"type": "integer", "format": "int64"},
+          "max_extracted_size_mb": {"type": "integer", "format": "int64"},
+          "txt_small_file_limit_mb": {"type": "number"},
+          "max_expansion_ratio": {"type": "number"},
+          "enabled_parsers": {"type": "array", "items": {"type": "string"}},
+          "parser_batch_size": {"type": "integer", "format": "int64"},
+          "search_index_batch_size": {"type": "integer", "format": "int64"}
+        }
+      }
+    }
+  },
+  "tags": [
+    {"name": "Health", "description": "Service liveness and readiness"},
+    {"name": "System", "description": "Service metadata"},
+    {"name": "Docs", "description": "Swagger and API contract"},
+    {"name": "Uploads", "description": "Upload session control"},
+    {"name": "Files", "description": "File inventory and extracted assets"},
+    {"name": "Jobs", "description": "Ingestion job lifecycle"},
+    {"name": "Job Events", "description": "Temporal event timeline"},
+    {"name": "Operations", "description": "State change operations"},
+    {"name": "Search", "description": "Enterprise search and filters"},
+    {"name": "Dashboard", "description": "Aggregated platform metrics"},
+    {"name": "Parsed Records", "description": "Parsed artifact records"},
+    {"name": "Admin", "description": "Tenant-level runtime settings"},
+    {"name": "Security", "description": "Password workflow endpoints"}
+  ]
+}

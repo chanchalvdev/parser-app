@@ -1,0 +1,15 @@
+DROP TABLE IF EXISTS system_settings;
+DROP TABLE IF EXISTS saved_searches;
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS search_index_status;
+DROP TABLE IF EXISTS parser_errors;
+DROP TABLE IF EXISTS parsed_records;
+DROP TABLE IF EXISTS job_events;
+DROP TABLE IF EXISTS archive_password_refs;
+DROP TABLE IF EXISTS ingestion_jobs;
+DROP TABLE IF EXISTS files;
+DROP TABLE IF EXISTS uploads;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS tenants;

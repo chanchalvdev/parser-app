@@ -1,0 +1,8 @@
+{
+  "event": "login_attempt",
+  "user": "alice",
+  "ip": "198.51.100.12",
+  "email": "alice@example.com",
+  "url": "https://example.org/login",
+  "tags": ["web", "success"]
+}

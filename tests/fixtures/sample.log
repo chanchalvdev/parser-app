@@ -1,0 +1,3 @@
+2026-06-15T12:00:00Z INFO auth-login user=alice ip=198.51.100.12 status=success
+2026-06-15T12:01:00Z WARN auth-fail user=bob ip=203.0.113.44 status=failed reason=invalid-password
+2026-06-15T12:02:00Z ERROR file-upload file=archive.zip user=charlie bytes=2048
