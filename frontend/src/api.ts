@@ -1,3 +1,5 @@
+import type { DashboardSummary, FileNode, Job, SearchItem, Settings, Upload } from './types'
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 const API_KEY = import.meta.env.VITE_API_KEY || ''
 
@@ -36,9 +38,9 @@ async function callApi<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  health: () => callApi('/health'),
-  listUploads: (query = '') => callApi(`/api/v1/uploads${query}`),
-  getUpload: (id: string) => callApi(`/api/v1/uploads/${id}`),
+  health: () => callApi<{ status: string }>('/health'),
+  listUploads: (query = '') => callApi<Upload[]>(`/api/v1/uploads${query}`),
+  getUpload: (id: string) => callApi<Upload>(`/api/v1/uploads/${id}`),
   uploadFile: async (file: File, archivePassword?: string): Promise<{ upload_id: string; job_id: string; status: string }> => {
     const form = new FormData()
     form.append('file', file)
@@ -50,8 +52,9 @@ export const api = {
       body: form,
     })
   },
-  listJobs: (query = '') => callApi(`/api/v1/jobs${query}`),
-  getJob: (id: string) => callApi(`/api/v1/jobs/${id}`),
+  listJobs: (query = '') => callApi<Job[]>(`/api/v1/jobs${query}`),
+  getJob: (id: string) => callApi<Job>(`/api/v1/jobs/${id}`),
+  jobEvents: (jobId: string) => callApi<unknown[]>(`/api/v1/jobs/${jobId}/events`),
   retryWithPassword: (jobId: string, password: string) =>
     callApi(`/api/v1/jobs/${jobId}/password`, {
       method: 'POST',
@@ -59,13 +62,13 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
     }),
   search: (q: string, limit = 25) =>
-    callApi(`/api/v1/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-  fileTree: (uploadId: string) => callApi(`/api/v1/files/${uploadId}/tree`),
-  dashboardSummary: () => callApi('/api/v1/dashboard/summary'),
-  auditLogs: () => callApi('/api/v1/audit'),
-  settings: () => callApi('/api/v1/admin/settings'),
+    callApi<SearchItem[]>(`/api/v1/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  fileTree: (uploadId: string) => callApi<FileNode[]>(`/api/v1/files/${uploadId}/tree`),
+  dashboardSummary: () => callApi<DashboardSummary>('/api/v1/dashboard/summary'),
+  auditLogs: () => callApi<unknown[]>('/api/v1/audit'),
+  settings: () => callApi<Settings>('/api/v1/admin/settings'),
   updateSettings: (payload: Record<string, any>) =>
-    callApi('/api/v1/admin/settings', {
+    callApi<Settings>('/api/v1/admin/settings', {
       method: 'PUT',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'application/json' },

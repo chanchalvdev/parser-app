@@ -11,7 +11,7 @@ import type { AdminSettings, AdminSettingsUpdate } from '@/types/admin'
 
 const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
   tenant_id: '11111111-1111-1111-1111-111111111001',
-  max_upload_size_mb: 512,
+  max_upload_size_mb: 5120,
   max_archive_depth: 10,
   max_extracted_files: 10000,
   max_extracted_size_mb: 1024,
