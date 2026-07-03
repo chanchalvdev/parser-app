@@ -2,7 +2,7 @@ import type { HTMLAttributes, ReactNode } from 'react'
 
 export type CardPadding = 'sm' | 'md' | 'lg' | 'none'
 
-export interface CardProps extends HTMLAttributes<HTMLElement> {
+export interface CardProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
   title?: ReactNode
   subtitle?: ReactNode
   actions?: ReactNode

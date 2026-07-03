@@ -59,3 +59,8 @@ export type DashboardSummary = {
   recent_jobs: Job[]
 }
 
+export type Settings = {
+  max_upload_size_mb?: number
+  [key: string]: unknown
+}
+

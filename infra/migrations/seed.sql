@@ -70,7 +70,7 @@ CROSS JOIN LATERAL (
     ('max_extracted_files', to_jsonb(10000), 'Maximum number of files extracted per upload'),
     ('max_extracted_size_mb', to_jsonb(1024), 'Maximum extracted payload size in MB'),
     ('txt_small_file_limit_mb', to_jsonb(10), 'Maximum MB limit for small-text optimization'),
-    ('max_upload_size_mb', to_jsonb(512), 'Maximum raw upload size in MB'),
+    ('max_upload_size_mb', to_jsonb(5120), 'Maximum raw upload size in MB (default 5 GB)'),
     ('enabled_parsers', to_jsonb(ARRAY['txt', 'log', 'csv', 'json', 'jsonl', 'xml', 'xlsx', 'pdf', 'text']), 'Comma-separable list of enabled parsers'),
     ('max_expansion_ratio', to_jsonb(20), 'Maximum extracted payload expansion ratio allowed'),
     ('parser_batch_size', to_jsonb(1000), 'Parser batch size for worker bulk DB writes'),

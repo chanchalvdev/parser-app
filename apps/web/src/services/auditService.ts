@@ -19,7 +19,7 @@ export const loadSettings = async (): Promise<SettingsState> => {
 
   return {
     retention_days: 30,
-    max_file_size_mb: 250,
+    max_file_size_mb: 5120,
     auto_retry_attempts: 3,
     highlight_snippets: true,
     default_page_size: 25,
