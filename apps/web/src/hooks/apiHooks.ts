@@ -1,5 +1,5 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
-import type { UseQueryOptions } from '@tanstack/react-query'
+import type { Query, UseQueryOptions } from '@tanstack/react-query'
 import type { FileItem, FileRecordsResponse, FileTreeNode } from '@/types/file'
 import { getDashboardErrorBreakdown, getDashboardEntities, getDashboardFileTypes, getDashboardProcessingDuration, getDashboardProcessingStatus, getDashboardSummary, getDashboardUploadVolume } from '@/services/dashboardApi'
 import { getFile, getFileRecords, getFileTree, listFiles } from '@/services/filesApi'
@@ -16,6 +16,36 @@ import type {
 } from '@/types/dashboard'
 import type { JobEventsResponse, JobListResponse, IngestionJob } from '@/types/job'
 import type { FileListResponse } from '@/types/file'
+
+/** Statuses for which the job is no longer progressing on its own. */
+export const TERMINAL_STATUSES = new Set<string>([
+  'completed',
+  'failed',
+  'cancelled',
+  'canceled',
+])
+
+/** Whether the job is still progressing and the UI should keep polling for live updates. */
+export const isJobLive = (job: { status?: string | null } | null | undefined): boolean => {
+  if (!job?.status) {
+    return true
+  }
+  return !TERMINAL_STATUSES.has(job.status.toLowerCase())
+}
+
+/**
+ * React Query refetchInterval that polls at `intervalMs` while the job is live
+ * and stops as soon as it hits a terminal status.
+ */
+const liveRefetchInterval = <TData>(
+  intervalMs: number,
+) => (query: Query<TData, Error, TData, readonly unknown[]>): number | false => {
+  const data = query.state.data as { status?: string | null } | undefined
+  if (data && !isJobLive(data)) {
+    return false
+  }
+  return intervalMs
+}
 
 export const useFiles = (
   params: {
@@ -126,6 +156,8 @@ export const useJob = (
     queryKey: ['job', jobId],
     enabled: !!jobId,
     queryFn: () => getJob(jobId),
+    refetchInterval: liveRefetchInterval<IngestionJob>(1500),
+    refetchIntervalInBackground: false,
     ...options,
   })
 
@@ -139,6 +171,8 @@ export const useJobEvents = (
     queryKey: ['jobs', jobId, 'events', page, pageSize],
     enabled: !!jobId,
     queryFn: () => getJobEvents(jobId, page, pageSize),
+    refetchInterval: liveRefetchInterval<JobEventsResponse>(2000),
+    refetchIntervalInBackground: false,
     ...options,
   })
 

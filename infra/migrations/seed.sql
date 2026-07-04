@@ -67,7 +67,7 @@ FROM (
 CROSS JOIN LATERAL (
   VALUES
     ('max_archive_depth', to_jsonb(10), 'Maximum nesting depth for archive extraction'),
-    ('max_extracted_files', to_jsonb(10000), 'Maximum number of files extracted per upload'),
+    ('max_extracted_files', to_jsonb(50000), 'Maximum number of files extracted per upload'),
     ('max_extracted_size_mb', to_jsonb(1024), 'Maximum extracted payload size in MB'),
     ('txt_small_file_limit_mb', to_jsonb(10), 'Maximum MB limit for small-text optimization'),
     ('max_upload_size_mb', to_jsonb(5120), 'Maximum raw upload size in MB (default 5 GB)'),

@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/Card'
-import { Input } from '@/components/ui/Input'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 
 type OptionalPasswordInputProps = {
   enabled: boolean
@@ -29,11 +29,10 @@ export const OptionalPasswordInput = ({
           <span>Archive is password protected</span>
         </label>
         {enabled ? (
-          <Input
-            type="password"
+          <PasswordInput
             value={password}
+            onChange={onPasswordChange}
             placeholder="Optional archive password"
-            onChange={(event) => onPasswordChange(event.target.value)}
             disabled={disabled}
           />
         ) : null}

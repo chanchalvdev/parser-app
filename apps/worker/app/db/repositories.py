@@ -167,7 +167,8 @@ class WorkerRepository:
             SET is_valid = %s,
                 validated = %s,
                 attempt_count = {attempt_expr},
-                last_validated_at = %s
+                last_validated_at = %s,
+                updated_at = NOW()
             WHERE tenant_id = %s
               AND file_id = %s
               AND password_ref_hash = %s

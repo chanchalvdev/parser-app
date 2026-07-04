@@ -84,7 +84,7 @@ def load_config() -> WorkerConfig:
         queue_name=_env("WORKER_QUEUE_NAME", _env("QUEUE_NAME", "ingestion_jobs")),
         redis_block_timeout=_env_int("WORKER_REDIS_BLOCK_TIMEOUT", 5),
         max_archive_depth=_env_int("WORKER_MAX_ARCHIVE_DEPTH", 10),
-        max_extracted_files=_env_int("WORKER_MAX_EXTRACTED_FILES", 10000),
+        max_extracted_files=_env_int("WORKER_MAX_EXTRACTED_FILES", 50000),
         max_extracted_size_mb=_env_int("WORKER_MAX_EXTRACTED_SIZE_MB", 1024),
         max_expansion_ratio=_env_float("WORKER_MAX_EXPANSION_RATIO", 20.0),
         minio_endpoint=_normalize_host(_env("MINIO_ENDPOINT", "minio:9000")),
