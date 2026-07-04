@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { submitFilePassword } from '@/services/filesApi'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 import type { SubmitFilePasswordRequest } from '@/types/file'
 
 type PasswordRequiredModalProps = {
@@ -60,11 +60,10 @@ export const PasswordRequiredModal = ({ fileId, open, onClose, onSuccess }: Pass
         <p className="mb-4 text-sm text-slate-300">
           This file is protected by a password. Enter it below to retry extraction.
         </p>
-        <Input
-          type="password"
+        <PasswordInput
           value={password}
+          onChange={setPassword}
           placeholder="Archive password"
-          onChange={(event) => setPassword(event.target.value)}
           disabled={mutation.isPending}
         />
         <div className="mt-4 flex justify-end gap-2">

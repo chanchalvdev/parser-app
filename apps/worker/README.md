@@ -23,7 +23,7 @@ Python ingestion worker for queue consumption and file processing.
 - `WORKER_REDIS_BLOCK_TIMEOUT` (defaults `5`)
 - `WORKER_POLL_INTERVAL_SECONDS` (defaults `1`)
 - `WORKER_MAX_ARCHIVE_DEPTH` (defaults `10`)
-- `WORKER_MAX_EXTRACTED_FILES` (defaults `10000`)
+- `WORKER_MAX_EXTRACTED_FILES` (defaults `50000`)
 - `WORKER_MAX_EXTRACTED_SIZE_MB` (defaults `1024`)
 - `WORKER_MAX_EXPANSION_RATIO` (defaults `20.0`)
 - `MINIO_ENDPOINT`

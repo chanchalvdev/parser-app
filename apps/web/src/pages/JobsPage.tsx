@@ -2,7 +2,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUiStore } from '@/stores/uiStore'
-import { useJobs } from '@/hooks/apiHooks'
+import { useJobs, isJobLive } from '@/hooks/apiHooks'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Input } from '@/components/ui/Input'
@@ -71,17 +71,18 @@ export const JobsPage = () => {
         header: 'Actions',
         cell: (info) => {
           const job = info.row.original
+          const live = isJobLive(job)
           return (
             <div className="flex items-center gap-2">
               <Link to={`/jobs/${job.id}`} className="rounded border border-slate-500 px-3 py-1.5 text-xs">
                 View
               </Link>
-              {job.status.toLowerCase() === 'failed' ? (
-                <RetryJobButton
-                  jobId={job.id}
-                  onRetrySuccess={() => queryClient.invalidateQueries({ queryKey: ['jobs'] })}
-                />
-              ) : null}
+              <RetryJobButton
+                jobId={job.id}
+                onRetrySuccess={() => queryClient.invalidateQueries({ queryKey: ['jobs'] })}
+                label={job.status.toLowerCase() === 'failed' ? 'Retry job' : 'Restart job'}
+                disabled={live}
+              />
             </div>
           )
         },

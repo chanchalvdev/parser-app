@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useJob, useJobEvents, useFile } from '@/hooks/apiHooks'
+import { useJob, useJobEvents, useFile, isJobLive } from '@/hooks/apiHooks'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { parseTime } from '@/utils/query'
@@ -9,6 +9,7 @@ import { JobStatusBadge } from '@/components/jobs/JobStatusBadge'
 import { JobTimeline } from '@/components/jobs/JobTimeline'
 import { RetryJobButton } from '@/components/jobs/RetryJobButton'
 import { JobErrorPanel } from '@/components/jobs/JobErrorPanel'
+import { LiveJobStatusBanner } from '@/components/jobs/LiveJobStatusBanner'
 import { PasswordRequiredModal } from '@/components/files/PasswordRequiredModal'
 
 export const JobDetailPage = () => {
@@ -108,6 +109,8 @@ export const JobDetailPage = () => {
           </div>
         </Card>
 
+      <LiveJobStatusBanner job={job} />
+
       <Card title="Root file" subtitle={rootFile ? rootFile.original_name : 'Loading root file details'}>
           {rootFileQuery.isLoading ? (
             <div className="text-slate-400">Loading root file...</div>
@@ -153,11 +156,14 @@ export const JobDetailPage = () => {
 
       <JobErrorPanel job={job} />
 
-      {job.status.toLowerCase() === 'failed' ? (
-        <Card title="Actions">
-          <RetryJobButton jobId={job.id} onRetrySuccess={refreshAfterRetry} label="Retry job" />
-        </Card>
-      ) : null}
+      <Card title="Actions">
+        <RetryJobButton
+          jobId={job.id}
+          onRetrySuccess={refreshAfterRetry}
+          label={job.status.toLowerCase() === 'failed' ? 'Retry job' : 'Restart job'}
+          disabled={isJobLive(job)}
+        />
+      </Card>
 
       <PasswordRequiredModal
         fileId={blockedFileId || ''}

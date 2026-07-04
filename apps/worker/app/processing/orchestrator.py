@@ -81,7 +81,7 @@ class IngestionOrchestrator:
         parser_registry: ParserRegistry | None = None,
         parser_batch_size: int = 1000,
         max_archive_depth: int = 10,
-        max_extracted_files: int = 10000,
+        max_extracted_files: int = 50000,
         max_extracted_size_mb: int = 1024,
         max_expansion_ratio: float = 20.0,
         password_secret_provider: PasswordSecretProvider | None = None,

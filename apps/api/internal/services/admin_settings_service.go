@@ -16,7 +16,7 @@ import (
 const (
 	defaultAdminMaxUploadSizeMB    = 5120
 	defaultAdminMaxArchiveDepth    = 10
-	defaultAdminMaxExtractedFiles  = 10000
+	defaultAdminMaxExtractedFiles  = 50000
 	defaultAdminMaxExtractedSizeMB = 1024
 	defaultAdminTxtSmallFileMB     = 10
 	defaultAdminMaxExpansionRatio  = 20.0
