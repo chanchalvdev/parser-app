@@ -45,7 +45,7 @@ Core data stores/services
 
 ## Tech stack
 
-- Go 1.22+ (HTTP API, queue producer/consumers adapters)
+- Go 1.23 (HTTP API, queue producer/consumers adapters)
 - Python 3.10+ (worker orchestrator/parsers/indexers)
 - React + TypeScript + Vite + Tailwind (UI)
 - PostgreSQL 16

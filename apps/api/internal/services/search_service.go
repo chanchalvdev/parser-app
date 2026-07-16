@@ -21,7 +21,7 @@ const (
 	searchDefaultSort      = "relevance"
 	searchSuggestionLimit  = 10
 	searchPreviewMaxLen    = 420
-	searchDefaultTenantID  = "11111111-1111-1111-1111-111111111001"
+	searchDefaultTenantID  = "00000000-0000-0000-0000-000000000001"
 )
 
 var (

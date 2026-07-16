@@ -4,3 +4,5 @@ psycopg2-binary==2.9.10
 opensearch-py==2.8.0
 py7zr==0.20.8
 rarfile==4.2
+ijson==3.3.0
+charset-normalizer==3.3.2

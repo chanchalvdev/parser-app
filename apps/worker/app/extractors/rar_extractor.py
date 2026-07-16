@@ -92,6 +92,16 @@ class RarExtractor(BaseArchiveExtractor):
                     )
                 
                 return extracted
+        except getattr(rarfile, "NeedFirstVolume", ()) as exc:
+            # A multi-volume (split) RAR set must be opened from its first volume;
+            # the remaining parts are read automatically from the same directory.
+            # The platform ingests one uploaded object at a time, so a non-first
+            # volume can never be reassembled on its own.
+            raise UnsupportedArchiveError(
+                "rar archive is one part of a multi-volume (split) set; extraction must "
+                "start from the first volume. Upload the first volume (e.g. name.part1.rar "
+                "or name.rar) — multi-volume archives cannot be extracted from a later part."
+            ) from exc
         except getattr(rarfile, "BadRarFile", RuntimeError) as exc:
             raise CorruptArchiveError("rar archive is corrupt") from exc
         except Exception as exc:

@@ -170,6 +170,7 @@ class IngestionOrchestrator:
                     stage="archive_extract",
                     error_code=getattr(exc, "error_code", "WORKER_PROCESSING_ERROR"),
                     message=str(exc),
+                    error=exc,
                 )
                 raise
 
@@ -180,6 +181,7 @@ class IngestionOrchestrator:
                 stage="processing",
                 error_code="WORKER_PROCESSING_ERROR",
                 message=f"{type(exc).__name__}: {exc}",
+                error=exc,
             )
             raise
 
@@ -402,6 +404,7 @@ class IngestionOrchestrator:
                         stage="archive_child_processing",
                         error_code=getattr(exc, "error_code", "WORKER_PROCESSING_ERROR"),
                         message=f"{type(exc).__name__}: {exc}",
+                        error=exc,
                     )
                     raise
 
@@ -1146,7 +1149,30 @@ class IngestionOrchestrator:
         stage: str,
         error_code: str,
         message: str,
+        error: BaseException | None = None,
     ) -> None:
+        # Emit a single structured log line explaining exactly why the job failed.
+        # error_code/stage/reason make it greppable; exc_info attaches the traceback
+        # of the underlying cause when we have it.
+        self.logger.error(
+            "job failed",
+            extra={
+                "job_id": job_id,
+                "tenant_id": tenant_id,
+                "file_id": file_id,
+                "stage": stage,
+                "error_code": error_code,
+                "reason": message,
+            },
+            exc_info=error,
+        )
+        # Mark the exception so the main-loop safety net (main._error_payload)
+        # does not overwrite this precise error_code/stage with a generic one.
+        if error is not None:
+            try:
+                error._job_failure_recorded = True  # type: ignore[attr-defined]
+            except Exception:
+                pass
         self.repository.update_file_status(tenant_id=tenant_id, file_id=file_id, status="failed")
         self.repository.create_job_event(
             tenant_id=tenant_id,
