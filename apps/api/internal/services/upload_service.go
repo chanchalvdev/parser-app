@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultTenantID      = "11111111-1111-1111-1111-111111111001"
+	defaultTenantID      = "00000000-0000-0000-0000-000000000001"
 	defaultUserID        = "11111111-1111-1111-1111-111111111100"
 	uploadURLExpiration  = 3600
 	uploadURLExpirationD = 3600 * time.Second

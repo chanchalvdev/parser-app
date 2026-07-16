@@ -47,6 +47,7 @@ func NewRouter(
 		router.Get("/jobs", jobHandler.List())
 		router.Get("/jobs/{job_id}", jobHandler.GetByID())
 		router.Get("/jobs/{job_id}/events", jobHandler.Events())
+		router.Get("/jobs/{job_id}/records", jobHandler.Records())
 		router.Post("/jobs/{job_id}/retry", jobHandler.Retry())
 		router.Get("/dashboard/summary", dashboardHandler.Summary())
 		router.Get("/dashboard/file-types", dashboardHandler.FileTypes())

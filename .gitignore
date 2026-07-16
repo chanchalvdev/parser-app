@@ -1,15 +1,28 @@
 /.env
 /.env.local
-/backend/bin
-/backend/vendor
-/backend/.cache
-/worker/.venv
-/worker/__pycache__
-/worker/.pytest_cache
-/frontend/node_modules
-/frontend/dist
 /tmp
 /.idea
 /.vscode
+.DS_Store
 
+# Dependencies and build output (applies anywhere in the repo)
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Go
+/apps/api/bin
+
+# Editor/tool artifacts
 *.tsbuildinfo
+*.bak
+
+# Legacy trees superseded by apps/* — kept locally only, safe to delete
+/backend/
+/worker/
+/frontend/

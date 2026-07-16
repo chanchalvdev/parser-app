@@ -108,6 +108,7 @@ func main() {
 		jobRepo,
 		jobEventRepo,
 		fileRepo,
+		parsedRecordRepo,
 		auditLogRepo,
 		queueProducer,
 		cfg.MinioBucket,
