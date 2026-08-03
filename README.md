@@ -6,7 +6,7 @@ Enterprise File Ingestion Platform is a local-first scaffold for:
 
 - uploading files (presigned direct-to-object-store PUT, multi-GB capable)
 - recursively extracting archives (ZIP, RAR, TAR, TAR.GZ/TGZ, 7Z — including nested and password-protected)
-- parsing content into structured records (TXT/LOG, CSV, JSON/JSONL, XML, XLSX, PDF, generic text)
+- parsing content into structured records (TXT/LOG, CSV, JSON/JSONL, generic text)
 - extracting entities/IOCs from every record (IPv4, emails, URLs, domains, timestamps, MD5/SHA1/SHA256, CVE IDs, Bitcoin addresses)
 - normalizing infostealer log dumps into unified credential records (secrets hashed, never stored in plaintext)
 - indexing parsed records into OpenSearch
@@ -31,7 +31,7 @@ Client (React Web)
 
 Go API -> Worker Container
   -> downloads uploaded file from MinIO
-  -> detects file type (libmagic + extension + null-byte sampling)
+  -> detects file type (extension + MIME + null-byte sampling; libmagic if installed)
   -> extracts archives recursively under depth/count/size/expansion limits
   -> parses and extracts records + entities
   -> inserts parsed records in PostgreSQL (batched)
@@ -51,7 +51,7 @@ Core data stores/services
 ## Tech stack
 
 - Go 1.23 (HTTP API, queue producer/consumers adapters)
-- Python 3.10+ (worker orchestrator/parsers/extractors/loaders)
+- Python 3.11 (worker orchestrator/parsers/extractors/loaders)
 - React 18 + TypeScript + Vite 6 + Tailwind (UI)
 - PostgreSQL 16
 - Redis 7
@@ -106,15 +106,21 @@ recorded as attempts against `archive_password_refs`.
 ### Parsers
 Selected in order by `ParserRegistry` (`apps/worker/app/parsers/registry.py`):
 
-| Parser | Extensions / hints |
-|---|---|
-| `txt` | `txt`, `log`, `out`, `err`, `text/plain` |
-| `csv` | `csv` |
-| `json` | `json`, `jsonl` |
-| `xml` | `xml` |
-| `excel` | `xlsx` |
-| `pdf` | `pdf` |
-| `generic_text` | fallback for anything text-like |
+| Parser | Extensions / hints | Status |
+|---|---|---|
+| `txt` | `txt`, `log`, `out`, `err`, `text/plain` | implemented |
+| `csv` | `csv` (delimiter sniffing, header cleaning) | implemented |
+| `json` | `json`, `jsonl` | implemented |
+| `generic_text` | fallback for anything text-like | implemented |
+| `xml` | `xml` | **scaffold** — raises `UnsupportedParserError` |
+| `excel` | `xlsx` | **scaffold** — raises `UnsupportedParserError` |
+| `pdf` | `pdf` | **scaffold** — raises `UnsupportedParserError` |
+
+The three scaffolded parsers are registered and claim their extensions, but their `parse()` raises
+`UnsupportedParserError("... implementation is intentionally deferred")`. Uploading an `.xml`,
+`.xlsx`, or `.pdf` therefore produces a `NO_PARSER_FOUND` parser error rather than records. The
+`enabled_parsers` setting seeded in `system_settings` lists them for forward compatibility; it does
+not imply a working implementation.
 
 Files with no matching parser and no text-like signature fail with `NO_PARSER_FOUND` and are recorded
 in `parser_errors` — a child failure does not abort the whole job, only a root failure does.
