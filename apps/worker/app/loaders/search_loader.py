@@ -254,6 +254,7 @@ class SearchIndexLoader:
         hashes = (
             as_list(raw_entities.get("hashes"))
             + as_list(raw_entities.get("md5_like_hashes"))
+            + as_list(raw_entities.get("sha1_like_hashes"))
             + as_list(raw_entities.get("sha256_like_hashes"))
         )
 

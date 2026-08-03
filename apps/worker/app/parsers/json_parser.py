@@ -166,7 +166,9 @@ class JsonParser(BaseParser):
         )
 
     def _iter_json_array_streaming(self, file_path: str) -> Iterator[Any]:
-        with Path(file_path).open("r", encoding="utf-8", errors="replace") as handle:
+        # ijson streams from a binary handle (text mode is deprecated in ijson 3.x),
+        # so arbitrarily large JSON arrays are parsed in constant memory.
+        with Path(file_path).open("rb") as handle:
             yield from ijson.items(handle, "item")  # type: ignore[misc]
 
     def _iter_json_array_fallback(self, file_path: str) -> Iterator[Any]:

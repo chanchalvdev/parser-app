@@ -62,6 +62,23 @@ func (h *JobHandler) Events() http.HandlerFunc {
 	}
 }
 
+func (h *JobHandler) Records() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jobID := chi.URLParam(r, "job_id")
+		response, err := h.jobService.ListJobRecords(r.Context(), services.ListJobRecordsRequest{
+			JobID:    jobID,
+			Search:   strings.TrimSpace(r.URL.Query().Get("q")),
+			Page:     parsePageParam(r, "page"),
+			PageSize: parsePageSizeParam(r, "page_size"),
+		})
+		if err != nil {
+			writeJobError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
 func (h *JobHandler) Retry() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		jobID := chi.URLParam(r, "job_id")

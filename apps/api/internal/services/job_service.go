@@ -16,6 +16,7 @@ import (
 const (
 	defaultJobListPageSize = 25
 	maxJobListPageSize     = 200
+	maxJobRecordsPageSize  = 500
 )
 
 var (
@@ -23,12 +24,13 @@ var (
 )
 
 type JobService struct {
-	jobRepo       repositories.JobRepository
-	jobEventRepo  repositories.JobEventRepository
-	fileRepo      repositories.FileRepository
-	auditLogRepo  repositories.AuditLogRepository
-	queueProducer queue.Producer
-	minioBucket   string
+	jobRepo          repositories.JobRepository
+	jobEventRepo     repositories.JobEventRepository
+	fileRepo         repositories.FileRepository
+	parsedRecordRepo repositories.ParsedRecordRepository
+	auditLogRepo     repositories.AuditLogRepository
+	queueProducer    queue.Producer
+	minioBucket      string
 }
 
 type ListJobsRequest struct {
@@ -67,18 +69,77 @@ func NewJobService(
 	jobRepo repositories.JobRepository,
 	jobEventRepo repositories.JobEventRepository,
 	fileRepo repositories.FileRepository,
+	parsedRecordRepo repositories.ParsedRecordRepository,
 	auditLogRepo repositories.AuditLogRepository,
 	queueProducer queue.Producer,
 	minioBucket string,
 ) *JobService {
 	return &JobService{
-		jobRepo:       jobRepo,
-		jobEventRepo:  jobEventRepo,
-		fileRepo:      fileRepo,
-		auditLogRepo:  auditLogRepo,
-		queueProducer: queueProducer,
-		minioBucket:   minioBucket,
+		jobRepo:          jobRepo,
+		jobEventRepo:     jobEventRepo,
+		fileRepo:         fileRepo,
+		parsedRecordRepo: parsedRecordRepo,
+		auditLogRepo:     auditLogRepo,
+		queueProducer:    queueProducer,
+		minioBucket:      minioBucket,
 	}
+}
+
+// ListJobRecordsRequest asks for all parsed records produced by a single job,
+// aggregated across every file that job extracted and parsed.
+type ListJobRecordsRequest struct {
+	JobID    string
+	Search   string
+	Page     int
+	PageSize int
+}
+
+type JobRecordsResponse struct {
+	JobID    string                 `json:"job_id"`
+	Total    int64                  `json:"total"`
+	Page     int                    `json:"page"`
+	PageSize int                    `json:"page_size"`
+	Search   string                 `json:"search"`
+	Records  []*models.ParsedRecord `json:"records"`
+}
+
+func (s *JobService) ListJobRecords(ctx context.Context, req ListJobRecordsRequest) (*JobRecordsResponse, error) {
+	if s.jobRepo == nil || s.parsedRecordRepo == nil {
+		return nil, fmt.Errorf("job service is not initialized")
+	}
+
+	req.JobID = strings.TrimSpace(req.JobID)
+	if req.JobID == "" {
+		return nil, fmt.Errorf("%w: job_id is required", ErrInvalidJobRequest)
+	}
+	req.Search = strings.TrimSpace(req.Search)
+	req.Page = normalizePage(req.Page, 1)
+	req.PageSize = normalizePageSize(req.PageSize, defaultJobListPageSize, maxJobRecordsPageSize)
+
+	if _, err := s.jobRepo.GetJobByID(ctx, req.JobID); err != nil {
+		return nil, err
+	}
+
+	limit := req.PageSize
+	offset := (req.Page - 1) * req.PageSize
+
+	records, err := s.parsedRecordRepo.ListRecordsByJobID(ctx, req.JobID, req.Search, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	total, err := s.parsedRecordRepo.CountRecordsByJobID(ctx, req.JobID, req.Search)
+	if err != nil {
+		return nil, err
+	}
+
+	return &JobRecordsResponse{
+		JobID:    req.JobID,
+		Total:    total,
+		Page:     req.Page,
+		PageSize: req.PageSize,
+		Search:   req.Search,
+		Records:  records,
+	}, nil
 }
 
 func (s *JobService) ListJobs(ctx context.Context, req ListJobsRequest) (*JobListResponse, error) {
