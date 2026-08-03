@@ -70,6 +70,22 @@ class ExtractedChild:
     is_archive: bool
 
 
+# Parsing occupies the 10%–90% band of the progress bar (detection/setup below,
+# indexing/finalize above). Total record count is unknown while streaming, so
+# the value approaches 90% asymptotically as records grow and never claims
+# completion — mark_job_completed() sets 100. Monotonic in records_parsed.
+_PROGRESS_FLOOR = 10.0
+_PROGRESS_CEIL = 90.0
+_PROGRESS_SCALE = 5000
+
+
+def _parsing_progress_percent(records_parsed: int) -> float:
+    if records_parsed <= 0:
+        return _PROGRESS_FLOOR
+    fraction = records_parsed / (records_parsed + _PROGRESS_SCALE)
+    return round(_PROGRESS_FLOOR + (_PROGRESS_CEIL - _PROGRESS_FLOOR) * fraction, 2)
+
+
 class IngestionOrchestrator:
     def __init__(
         self,
@@ -800,6 +816,22 @@ class IngestionOrchestrator:
                             "inserted_count": records_inserted,
                         },
                     )
+                    # Advance the job progress bar during parsing. Without this
+                    # the percentage sits at the mark_job_running() value (5%)
+                    # until completion flips it to 100, even as records stream in.
+                    try:
+                        self.repository.update_job_status(
+                            tenant_id=tenant_id,
+                            job_id=job_id,
+                            status="running",
+                            current_stage="parsing",
+                            progress_percent=_parsing_progress_percent(records_parsed),
+                        )
+                    except Exception:  # progress is best-effort, never fail a job over it
+                        self.logger.debug(
+                            "progress update skipped",
+                            extra={"tenant_id": tenant_id, "job_id": job_id},
+                        )
 
             records_inserted += loader.flush()
             if search_records_pending:

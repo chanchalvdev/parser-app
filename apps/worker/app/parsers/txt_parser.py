@@ -7,11 +7,20 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from app.parsers.base_parser import BaseParser, ParsedRecord, UnsupportedParserError
+from app.parsers.infostealer import (
+    BTC_RE,
+    CVE_RE,
+    SHA1_RE,
+    parse_credential_blocks,
+    stealer_category,
+)
 from app.processing.file_detector import FileDetectionResult
 
 
 LARGE_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024
 CHUNK_SIZE_LINES = 500
+# Bound how much stealer password text is buffered for credential-block assembly.
+CREDENTIAL_BUFFER_CHAR_CAP = 8 * 1024 * 1024
 BINARY_SAMPLE_BYTES = 65536
 PRINTABLE_BYTES = set(range(9, 13)) | set(range(32, 127))
 
@@ -73,7 +82,7 @@ def _looks_like_binary(file_path: str) -> bool:
     return non_printable / max(len(sample), 1) > 0.35
 
 
-def _extract_entities(text: str) -> dict[str, list[str]]:
+def _extract_entities(text: str) -> dict[str, Any]:
     def dedupe(values: list[str]) -> list[str]:
         normalized: list[str] = []
         seen: set[str] = set()
@@ -94,22 +103,46 @@ def _extract_entities(text: str) -> dict[str, list[str]]:
             continue
         domains.append(value)
 
-    return {
+    entities: dict[str, list[str]] = {
         "ipv4": dedupe(IPV4_RE.findall(text)),
         "emails": dedupe(EMAIL_RE.findall(text)),
         "urls": dedupe(URL_RE.findall(text)),
         "domains": dedupe(domains),
         "timestamps": dedupe(TIMESTAMP_RE.findall(text)),
         "md5_like_hashes": dedupe(MD5_RE.findall(text)),
+        "sha1_like_hashes": dedupe(SHA1_RE.findall(text)),
         "sha256_like_hashes": dedupe(SHA256_RE.findall(text)),
+        "cve": dedupe(CVE_RE.findall(text)),
+        "bitcoin_addresses": dedupe(BTC_RE.findall(text)),
     }
+    # Infostealer credential blocks (SOFT/URL/USER/PASS). Secrets are hashed,
+    # never stored in plaintext. Stored under a distinct key so IOC consumers
+    # (search/dashboard) that read string-list keys are unaffected.
+    credentials = parse_credential_blocks(text)
+    if credentials:
+        entities["credentials"] = credentials
+    return entities
 
 
 def _is_line_empty(line: str) -> bool:
     return line.strip() == ""
 
 
-def _line_record(tenant_id: str, file_id: str, job_id: str, record_number: int, line_number: int, line: str) -> ParsedRecord:
+def _tagged(structured_data: dict[str, Any], category: str | None) -> dict[str, Any]:
+    if category:
+        structured_data = {**structured_data, "stealer_category": category}
+    return structured_data
+
+
+def _line_record(
+    tenant_id: str,
+    file_id: str,
+    job_id: str,
+    record_number: int,
+    line_number: int,
+    line: str,
+    category: str | None = None,
+) -> ParsedRecord:
     entities = _extract_entities(line)
     return ParsedRecord(
         tenant_id=tenant_id,
@@ -122,8 +155,39 @@ def _line_record(tenant_id: str, file_id: str, job_id: str, record_number: int, 
         start_line=line_number,
         end_line=line_number,
         content_text=line,
-        structured_data={"line_number": line_number},
+        structured_data=_tagged({"line_number": line_number}, category),
         extracted_entities=entities,
+        event_timestamp=datetime.now(timezone.utc),
+    )
+
+
+def _stealer_credential_record(
+    tenant_id: str,
+    file_id: str,
+    job_id: str,
+    record_number: int,
+    category: str,
+    credentials: list[dict[str, Any]],
+) -> ParsedRecord:
+    """Consolidated credential record for a stealer password file.
+
+    Small stealer logs are parsed line-by-line, so multi-line SOFT/URL/USER/PASS
+    blocks never assemble in the per-line path. This record carries the blocks
+    parsed from the whole file. Secrets are already hashed by the grammar.
+    """
+    return ParsedRecord(
+        tenant_id=tenant_id,
+        file_id=file_id,
+        job_id=job_id,
+        record_type="stealer_credential",
+        record_number=record_number,
+        line_number=None,
+        chunk_number=1,
+        start_line=None,
+        end_line=None,
+        content_text=None,
+        structured_data=_tagged({"credential_count": len(credentials)}, category),
+        extracted_entities={"credentials": credentials},
         event_timestamp=datetime.now(timezone.utc),
     )
 
@@ -137,6 +201,7 @@ def _chunk_record(
     chunk_start: int,
     chunk_end: int,
     lines: list[str],
+    category: str | None = None,
 ) -> ParsedRecord:
     content = "\n".join(lines)
     entities = _extract_entities(content)
@@ -151,12 +216,15 @@ def _chunk_record(
         start_line=chunk_start,
         end_line=chunk_end,
         content_text=content,
-        structured_data={
-            "chunk_size": len(lines),
-            "line_start": chunk_start,
-            "line_end": chunk_end,
-            "chunk_number": chunk_number,
-        },
+        structured_data=_tagged(
+            {
+                "chunk_size": len(lines),
+                "line_start": chunk_start,
+                "line_end": chunk_end,
+                "chunk_number": chunk_number,
+            },
+            category,
+        ),
         extracted_entities=entities,
         event_timestamp=datetime.now(timezone.utc),
     )
@@ -205,6 +273,15 @@ class TxtParser(BaseParser):
         stream_as_chunks = file_size >= LARGE_FILE_THRESHOLD_BYTES
         record_number = 0
 
+        # Infostealer filename routing (Passwords.txt, Cookies/, UserInformation.txt, ...).
+        original_name = str(file_metadata.get("original_name", ""))
+        category = stealer_category(original_name)
+        # Password dumps are parsed line-by-line, which breaks multi-line
+        # credential blocks; buffer their text to reassemble blocks at the end.
+        collect_credentials = category == "stealer_password"
+        cred_buffer: list[str] = []
+        cred_buffer_chars = 0
+
         if stream_as_chunks:
             chunk_lines: list[str] = []
             chunk_number = 0
@@ -215,9 +292,15 @@ class TxtParser(BaseParser):
                 if _is_line_empty(normalized_line):
                     continue
 
+                if collect_credentials and cred_buffer_chars < CREDENTIAL_BUFFER_CHAR_CAP:
+                    cred_buffer.append(normalized_line)
+                    cred_buffer_chars += len(normalized_line) + 1
+
                 if not stream_as_chunks:
                     record_number += 1
-                    yield _line_record(tenant_id, file_id, job_id, record_number, line_number, normalized_line)
+                    yield _line_record(
+                        tenant_id, file_id, job_id, record_number, line_number, normalized_line, category
+                    )
                     continue
 
                 if chunk_start_line is None:
@@ -235,6 +318,7 @@ class TxtParser(BaseParser):
                         chunk_start=chunk_start_line,
                         chunk_end=line_number,
                         lines=chunk_lines,
+                        category=category,
                     )
                     chunk_lines = []
                     chunk_start_line = None
@@ -251,6 +335,15 @@ class TxtParser(BaseParser):
                     chunk_start=chunk_start_line if chunk_start_line is not None else 0,
                     chunk_end=line_number if line_number else 0,
                     lines=chunk_lines,
+                    category=category,
+                )
+
+        if collect_credentials and cred_buffer:
+            credentials = parse_credential_blocks("\n".join(cred_buffer))
+            if credentials:
+                record_number += 1
+                yield _stealer_credential_record(
+                    tenant_id, file_id, job_id, record_number, category, credentials
                 )
 
     def normalize(self, raw_record: ParsedRecord) -> ParsedRecord:

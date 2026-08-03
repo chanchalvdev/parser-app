@@ -289,51 +289,30 @@ func (r *PostgresDashboardRepository) GetDashboardTopEntities(ctx context.Contex
 	}
 
 	query := `
-		WITH extracted AS (
-			SELECT 'ip_addresses' AS entity_type, jsonb_array_elements_text(
+		WITH entity_keys(entity_type, json_key) AS (
+			VALUES
+				('ip_addresses', 'ipv4'),
+				('ip_addresses', 'ip_addresses'),
+				('emails', 'emails'),
+				('urls', 'urls'),
+				('domains', 'domains'),
+				('hashes', 'md5_like_hashes'),
+				('hashes', 'sha1_like_hashes'),
+				('hashes', 'sha256_like_hashes'),
+				('hashes', 'hashes'),
+				('cve', 'cve'),
+				('bitcoin_addresses', 'bitcoin_addresses')
+		),
+		extracted AS (
+			SELECT k.entity_type, jsonb_array_elements_text(
 				CASE
-					WHEN jsonb_typeof(extracted_entities->'ip_addresses') = 'array' THEN extracted_entities->'ip_addresses'
+					WHEN jsonb_typeof(pr.extracted_entities->k.json_key) = 'array' THEN pr.extracted_entities->k.json_key
 					ELSE '[]'::jsonb
 				END
 			) AS value
-			FROM parsed_records
-			WHERE tenant_id = $1
-			UNION ALL
-			SELECT 'emails' AS entity_type, jsonb_array_elements_text(
-				CASE
-					WHEN jsonb_typeof(extracted_entities->'emails') = 'array' THEN extracted_entities->'emails'
-					ELSE '[]'::jsonb
-				END
-			) AS value
-			FROM parsed_records
-			WHERE tenant_id = $1
-			UNION ALL
-			SELECT 'urls' AS entity_type, jsonb_array_elements_text(
-				CASE
-					WHEN jsonb_typeof(extracted_entities->'urls') = 'array' THEN extracted_entities->'urls'
-					ELSE '[]'::jsonb
-				END
-			) AS value
-			FROM parsed_records
-			WHERE tenant_id = $1
-			UNION ALL
-			SELECT 'domains' AS entity_type, jsonb_array_elements_text(
-				CASE
-					WHEN jsonb_typeof(extracted_entities->'domains') = 'array' THEN extracted_entities->'domains'
-					ELSE '[]'::jsonb
-				END
-			) AS value
-			FROM parsed_records
-			WHERE tenant_id = $1
-			UNION ALL
-			SELECT 'hashes' AS entity_type, jsonb_array_elements_text(
-				CASE
-					WHEN jsonb_typeof(extracted_entities->'hashes') = 'array' THEN extracted_entities->'hashes'
-					ELSE '[]'::jsonb
-				END
-			) AS value
-			FROM parsed_records
-			WHERE tenant_id = $1
+			FROM parsed_records pr
+			CROSS JOIN entity_keys k
+			WHERE pr.tenant_id = $1
 		),
 		counted AS (
 			SELECT

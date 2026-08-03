@@ -51,7 +51,10 @@ def test_json_parser_single_object(tmp_path: Path) -> None:
         "domains": [],
         "timestamps": [],
         "md5_like_hashes": [],
+        "sha1_like_hashes": [],
         "sha256_like_hashes": [],
+        "cve": [],
+        "bitcoin_addresses": [],
     }
 
 
