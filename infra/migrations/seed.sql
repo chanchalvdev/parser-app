@@ -3,7 +3,7 @@ BEGIN;
 WITH tenant_seed AS (
   INSERT INTO tenants (id, name, slug, status, created_at, updated_at)
   VALUES (
-    '11111111-1111-1111-1111-111111111001'::uuid,
+    '00000000-0000-0000-0000-000000000001'::uuid,
     'Default Tenant',
     'default',
     'active',
@@ -66,13 +66,13 @@ FROM (
 ) AS s_tenant
 CROSS JOIN LATERAL (
   VALUES
-    ('max_archive_depth', to_jsonb(10), 'Maximum nesting depth for archive extraction'),
-    ('max_extracted_files', to_jsonb(10000), 'Maximum number of files extracted per upload'),
-    ('max_extracted_size_mb', to_jsonb(1024), 'Maximum extracted payload size in MB'),
+    ('max_archive_depth', to_jsonb(20), 'Maximum nesting depth for archive extraction'),
+    ('max_extracted_files', to_jsonb(1000000), 'Maximum number of files extracted per upload'),
+    ('max_extracted_size_mb', to_jsonb(102400), 'Maximum extracted payload size in MB'),
     ('txt_small_file_limit_mb', to_jsonb(10), 'Maximum MB limit for small-text optimization'),
-    ('max_upload_size_mb', to_jsonb(512), 'Maximum raw upload size in MB'),
+    ('max_upload_size_mb', to_jsonb(10240), 'Maximum raw upload size in MB (default 10 GB)'),
     ('enabled_parsers', to_jsonb(ARRAY['txt', 'log', 'csv', 'json', 'jsonl', 'xml', 'xlsx', 'pdf', 'text']), 'Comma-separable list of enabled parsers'),
-    ('max_expansion_ratio', to_jsonb(20), 'Maximum extracted payload expansion ratio allowed'),
+    ('max_expansion_ratio', to_jsonb(100), 'Maximum extracted payload expansion ratio allowed'),
     ('parser_batch_size', to_jsonb(1000), 'Parser batch size for worker bulk DB writes'),
     ('search_index_batch_size', to_jsonb(1000), 'Search index batch size for worker bulk requests')
 ) AS s(s_key, s_value, s_desc)

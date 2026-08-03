@@ -9,7 +9,7 @@ func TestVersionServiceGetVersion(t *testing.T) {
 	if result.Service != "enterprise-file-platform-api" {
 		t.Fatalf("unexpected service name: %s", result.Service)
 	}
-	if result.Version != "v0.1.0" {
+	if result.Version != "0.1.0" {
 		t.Fatalf("unexpected version: %s", result.Version)
 	}
 	if result.Environment != "unit-test" {

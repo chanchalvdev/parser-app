@@ -32,11 +32,16 @@ def _error_payload(message: IngestionJobMessage | None, repository: WorkerReposi
     try:
         if isinstance(err, (PasswordRequiredError, WrongPasswordError)):
             return
+        # If the orchestrator already recorded a precise failure for this job,
+        # do not overwrite its error_code/stage — this is only a fallback for
+        # unexpected crashes that escaped the orchestrator's own handling.
+        if getattr(err, "_job_failure_recorded", False):
+            return
         repository.mark_job_failed(
             job_id=message.job_id,
             tenant_id=message.tenant_id,
             stage="failed",
-            error_code="WORKER_PROCESSING_ERROR",
+            error_code=getattr(err, "error_code", "WORKER_PROCESSING_ERROR"),
             message=str(err),
         )
     except Exception:
@@ -122,10 +127,21 @@ def main() -> None:
         except Exception as exc:
             if message is not None:
                 _error_payload(message, repository, logger, exc)
-            logger.exception(
-                "error while processing queue message",
-                extra=message.to_log_payload() if message is not None else {},
-            )
+            if getattr(exc, "_job_failure_recorded", False):
+                # Already logged with full context + traceback by the orchestrator's
+                # "job failed" record; avoid a duplicate, misleading traceback here.
+                logger.info(
+                    "job failed (already recorded); skipping duplicate error handling",
+                    extra={
+                        **(message.to_log_payload() if message is not None else {}),
+                        "error_code": getattr(exc, "error_code", "WORKER_PROCESSING_ERROR"),
+                    },
+                )
+            else:
+                logger.exception(
+                    "error while processing queue message",
+                    extra=message.to_log_payload() if message is not None else {},
+                )
             time.sleep(config.poll_interval_seconds)
 
 

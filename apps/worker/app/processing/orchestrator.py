@@ -70,6 +70,22 @@ class ExtractedChild:
     is_archive: bool
 
 
+# Parsing occupies the 10%–90% band of the progress bar (detection/setup below,
+# indexing/finalize above). Total record count is unknown while streaming, so
+# the value approaches 90% asymptotically as records grow and never claims
+# completion — mark_job_completed() sets 100. Monotonic in records_parsed.
+_PROGRESS_FLOOR = 10.0
+_PROGRESS_CEIL = 90.0
+_PROGRESS_SCALE = 5000
+
+
+def _parsing_progress_percent(records_parsed: int) -> float:
+    if records_parsed <= 0:
+        return _PROGRESS_FLOOR
+    fraction = records_parsed / (records_parsed + _PROGRESS_SCALE)
+    return round(_PROGRESS_FLOOR + (_PROGRESS_CEIL - _PROGRESS_FLOOR) * fraction, 2)
+
+
 class IngestionOrchestrator:
     def __init__(
         self,
@@ -81,7 +97,7 @@ class IngestionOrchestrator:
         parser_registry: ParserRegistry | None = None,
         parser_batch_size: int = 1000,
         max_archive_depth: int = 10,
-        max_extracted_files: int = 10000,
+        max_extracted_files: int = 50000,
         max_extracted_size_mb: int = 1024,
         max_expansion_ratio: float = 20.0,
         password_secret_provider: PasswordSecretProvider | None = None,
@@ -170,6 +186,7 @@ class IngestionOrchestrator:
                     stage="archive_extract",
                     error_code=getattr(exc, "error_code", "WORKER_PROCESSING_ERROR"),
                     message=str(exc),
+                    error=exc,
                 )
                 raise
 
@@ -180,6 +197,7 @@ class IngestionOrchestrator:
                 stage="processing",
                 error_code="WORKER_PROCESSING_ERROR",
                 message=f"{type(exc).__name__}: {exc}",
+                error=exc,
             )
             raise
 
@@ -402,6 +420,7 @@ class IngestionOrchestrator:
                         stage="archive_child_processing",
                         error_code=getattr(exc, "error_code", "WORKER_PROCESSING_ERROR"),
                         message=f"{type(exc).__name__}: {exc}",
+                        error=exc,
                     )
                     raise
 
@@ -797,6 +816,22 @@ class IngestionOrchestrator:
                             "inserted_count": records_inserted,
                         },
                     )
+                    # Advance the job progress bar during parsing. Without this
+                    # the percentage sits at the mark_job_running() value (5%)
+                    # until completion flips it to 100, even as records stream in.
+                    try:
+                        self.repository.update_job_status(
+                            tenant_id=tenant_id,
+                            job_id=job_id,
+                            status="running",
+                            current_stage="parsing",
+                            progress_percent=_parsing_progress_percent(records_parsed),
+                        )
+                    except Exception:  # progress is best-effort, never fail a job over it
+                        self.logger.debug(
+                            "progress update skipped",
+                            extra={"tenant_id": tenant_id, "job_id": job_id},
+                        )
 
             records_inserted += loader.flush()
             if search_records_pending:
@@ -1146,7 +1181,30 @@ class IngestionOrchestrator:
         stage: str,
         error_code: str,
         message: str,
+        error: BaseException | None = None,
     ) -> None:
+        # Emit a single structured log line explaining exactly why the job failed.
+        # error_code/stage/reason make it greppable; exc_info attaches the traceback
+        # of the underlying cause when we have it.
+        self.logger.error(
+            "job failed",
+            extra={
+                "job_id": job_id,
+                "tenant_id": tenant_id,
+                "file_id": file_id,
+                "stage": stage,
+                "error_code": error_code,
+                "reason": message,
+            },
+            exc_info=error,
+        )
+        # Mark the exception so the main-loop safety net (main._error_payload)
+        # does not overwrite this precise error_code/stage with a generic one.
+        if error is not None:
+            try:
+                error._job_failure_recorded = True  # type: ignore[attr-defined]
+            except Exception:
+                pass
         self.repository.update_file_status(tenant_id=tenant_id, file_id=file_id, status="failed")
         self.repository.create_job_event(
             tenant_id=tenant_id,

@@ -13,6 +13,8 @@ import (
 type ParsedRecordRepository interface {
 	ListRecordsByFileID(ctx context.Context, fileID string, limit int, offset int) ([]*models.ParsedRecord, error)
 	CountRecordsByFileID(ctx context.Context, fileID string) (int64, error)
+	ListRecordsByJobID(ctx context.Context, jobID string, search string, limit int, offset int) ([]*models.ParsedRecord, error)
+	CountRecordsByJobID(ctx context.Context, jobID string, search string) (int64, error)
 }
 
 type PostgresParsedRecordRepository struct {
@@ -77,6 +79,69 @@ func (r *PostgresParsedRecordRepository) CountRecordsByFileID(ctx context.Contex
 	var count int64
 	err := r.pool.QueryRow(ctx, query, fileID).Scan(&count)
 	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *PostgresParsedRecordRepository) ListRecordsByJobID(ctx context.Context, jobID string, search string, limit int, offset int) ([]*models.ParsedRecord, error) {
+	if err := validatePool(r.pool); err != nil {
+		return nil, err
+	}
+	if jobID == "" {
+		return nil, fmt.Errorf("job_id is required")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `
+		SELECT
+			id, tenant_id, file_id, job_id, record_type, record_number, line_number, chunk_number,
+			start_line, end_line, content_text, structured_data, extracted_entities, event_timestamp, created_at
+		FROM parsed_records
+		WHERE job_id = $1
+		  AND ($2 = '' OR content_text ILIKE '%' || $2 || '%')
+		ORDER BY file_id ASC, record_number ASC NULLS LAST, created_at ASC
+		LIMIT $3 OFFSET $4
+	`
+	rows, err := r.pool.Query(ctx, query, jobID, search, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]*models.ParsedRecord, 0)
+	for rows.Next() {
+		record, err := scanParsedRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (r *PostgresParsedRecordRepository) CountRecordsByJobID(ctx context.Context, jobID string, search string) (int64, error) {
+	if err := validatePool(r.pool); err != nil {
+		return 0, err
+	}
+	if jobID == "" {
+		return 0, fmt.Errorf("job_id is required")
+	}
+	query := `
+		SELECT COUNT(*) FROM parsed_records
+		WHERE job_id = $1
+		  AND ($2 = '' OR content_text ILIKE '%' || $2 || '%')
+	`
+	var count int64
+	if err := r.pool.QueryRow(ctx, query, jobID, search).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
