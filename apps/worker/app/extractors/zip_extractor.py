@@ -14,6 +14,17 @@ from app.extractors.base_extractor import (
 )
 from app.processing.file_detector import FileDetectionResult
 
+try:
+    # pyzipper is a zipfile fork that adds WinZip AES decryption; stdlib zipfile only
+    # understands legacy ZipCrypto, which most modern encrypted archives no longer use.
+    import pyzipper
+except Exception:  # pragma: no cover - optional dependency in local dev
+    pyzipper = None
+
+_BAD_ZIP_ERRORS: tuple[type[Exception], ...] = (zipfile.BadZipFile,)
+if pyzipper is not None:
+    _BAD_ZIP_ERRORS += (pyzipper.BadZipFile,)
+
 
 class ZipExtractor(BaseArchiveExtractor):
     archive_type = "zip"
@@ -39,7 +50,8 @@ class ZipExtractor(BaseArchiveExtractor):
         extracted_size = 0
         archive_size = Path(file_path).stat().st_size
         try:
-            with zipfile.ZipFile(file_path, "r") as zf:
+            open_zip = pyzipper.AESZipFile if pyzipper is not None else zipfile.ZipFile
+            with open_zip(file_path, "r") as zf:
                 entries = [entry for entry in zf.infolist() if not entry.is_dir()]
                 if not entries:
                     return []
@@ -88,7 +100,7 @@ class ZipExtractor(BaseArchiveExtractor):
                     )
 
                 return extracted
-        except zipfile.BadZipFile as exc:
+        except _BAD_ZIP_ERRORS as exc:
             raise CorruptArchiveError("zip archive is corrupt") from exc
         except WrongPasswordError:
             raise
