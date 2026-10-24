@@ -115,6 +115,33 @@ def test_txt_parser_wires_stealer_routing_and_assembles_blocks(tmp_path):
     assert all(len(c["secret_hash"]) == 64 for c in creds)
 
 
+def test_txt_parser_never_emits_plaintext_passwords(tmp_path):
+    # Per-line records are persisted and indexed, so the PASS values must not survive in them.
+    source = tmp_path / "Passwords.txt"
+    source.write_text(
+        "SOFT: Chrome\nURL: https://mail.example.com\nUSER: alice\nPASS: hunter2\n\n"
+        "Browser: Edge\nHost: https://bank.example.com\nLogin: bob\nP455W0RD: s3cret\n",
+        encoding="utf-8",
+    )
+    metadata = {"tenant_id": "t1", "file_id": "f1", "job_id": "j1", "original_name": "Passwords.txt"}
+    records = list(TxtParser().parse(str(source), metadata, _txt_detection()))
+
+    stored = " ".join(str(r.content_text) + str(r.extracted_entities) for r in records)
+    assert "hunter2" not in stored
+    assert "s3cret" not in stored
+    assert any(r.content_text == "USER: alice" for r in records)
+
+    # Redacted lines must not be mistaken for a fresh credential with a hashed placeholder.
+    line_creds = [c for r in records if r.record_type == "text_line" for c in r.extracted_entities.get("credentials", [])]
+    assert line_creds == [c for c in line_creds if "secret_hash" not in c]
+
+    creds = next(r for r in records if r.record_type == "stealer_credential").extracted_entities["credentials"]
+    assert {c["secret_hash"] for c in creds} == {
+        hashlib.sha256(b"hunter2").hexdigest(),
+        hashlib.sha256(b"s3cret").hexdigest(),
+    }
+
+
 def test_txt_parser_non_stealer_file_no_credential_record(tmp_path):
     source = tmp_path / "notes.txt"
     source.write_text("just some log line\nanother line\n", encoding="utf-8")
