@@ -459,12 +459,16 @@ function PasswordPrompt({ fileId, wrong, onSubmitted }: { fileId: string; wrong:
   )
 }
 
-function EntityChips({ entities }: { entities?: Record<string, string[]> }) {
+function EntityChips({ entities }: { entities?: Record<string, Array<string | Credential>> }) {
   const flat = useMemo(() => {
     if (!entities) return [] as string[]
     const out: string[] = []
     for (const [k, vals] of Object.entries(entities)) {
-      for (const v of vals || []) out.push(`${k.replace(/_/g, ' ')}: ${v}`)
+      for (const v of vals || []) {
+        // credentials are objects ({username, secret_hash, ...}); every other key is a string list.
+        if (typeof v === 'string') out.push(`${k.replace(/_/g, ' ')}: ${v}`)
+        else if (v?.username) out.push(`credential: ${v.username}`)
+      }
     }
     return out.slice(0, 6)
   }, [entities])
