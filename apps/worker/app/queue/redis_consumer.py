@@ -67,7 +67,8 @@ class RedisIngestionQueueConsumer:
         self.logger = logging.getLogger("worker.queue")
 
     def pop(self) -> Optional[IngestionJobMessage]:
-        result = self.redis_client.brpop(self.queue_name, timeout=self.block_timeout_seconds)
+        # The API enqueues with RPUSH, so pop from the head to keep the queue FIFO.
+        result = self.redis_client.blpop(self.queue_name, timeout=self.block_timeout_seconds)
         if result is None:
             return None
 
