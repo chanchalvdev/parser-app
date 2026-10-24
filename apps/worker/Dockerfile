@@ -4,6 +4,11 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 
+# rarfile shells out to an external decoder; unar handles RAR4/RAR5 and encrypted archives.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unar \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
