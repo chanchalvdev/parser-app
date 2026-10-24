@@ -273,7 +273,7 @@ function UploadCard({ onUploaded }: { onUploaded: () => void }) {
     <div className="rounded-xl border border-slate-700/50 bg-[#0d1119] p-6">
       <h2 className="mb-1 text-lg font-semibold text-slate-100">Upload a file</h2>
       <p className="mb-5 text-sm text-slate-400">
-        Logs, JSON, CSV, XML, PDF, Excel, or archives (.zip / .rar / .tar / .7z) —
+        Logs, text, JSON, or CSV — or archives of them (.zip / .rar / .tar / .7z),
         password-protected or not. It is parsed into records you can search.
       </p>
 
@@ -525,7 +525,7 @@ function CredentialsTable({ credentials }: { credentials: Credential[] }) {
           <th className="px-3 py-2">Application</th>
           <th className="px-3 py-2">Host / URL</th>
           <th className="px-3 py-2">Username</th>
-          <th className="px-3 py-2">Password</th>
+          <th className="px-3 py-2">Password (SHA-256)</th>
         </tr>
       </thead>
       <tbody>
@@ -536,18 +536,17 @@ function CredentialsTable({ credentials }: { credentials: Credential[] }) {
             </td>
             <td className="px-3 py-2 font-mono text-xs text-slate-400">{c.url || '—'}</td>
             <td className="px-3 py-2 font-mono text-xs text-slate-300">{c.username || <span className="text-slate-600">—</span>}</td>
-           <td className="px-3 py-2">
-  {c.secret_hash ? (
-    <span className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-[#10151f] px-2 py-1 font-mono text-[11px] text-slate-400">
-      {/* ✅ UPDATED: Changed icon to a document/pencil, updated tooltip to reflect plaintext storage */}
-      <span title="Stored as plaintext (development mode only)">📝</span> 
-      {c.secret_hash}
-      <button onClick={() => copyText(c.secret_hash!)} className="text-slate-500 hover:text-emerald-300">⧉</button>
-    </span>
-  ) : (
-    <span className="text-slate-600">—</span>
-  )}
-</td>
+            <td className="px-3 py-2">
+              {c.secret_hash ? (
+                <span className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-[#10151f] px-2 py-1 font-mono text-[11px] text-slate-400">
+                  <span title="SHA-256 hash — plaintext passwords are never stored">🔒</span>
+                  {c.secret_hash.slice(0, 16)}…
+                  <button onClick={() => copyText(c.secret_hash!)} className="text-slate-500 hover:text-emerald-300">⧉</button>
+                </span>
+              ) : (
+                <span className="text-slate-600">—</span>
+              )}
+            </td>
           </tr>
         ))}
       </tbody>
