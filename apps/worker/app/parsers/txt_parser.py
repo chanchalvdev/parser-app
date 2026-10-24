@@ -12,6 +12,7 @@ from app.parsers.infostealer import (
     CVE_RE,
     SHA1_RE,
     parse_credential_blocks,
+    redact_secret_line,
     stealer_category,
 )
 from app.processing.file_detector import FileDetectionResult
@@ -292,9 +293,13 @@ class TxtParser(BaseParser):
                 if _is_line_empty(normalized_line):
                     continue
 
-                if collect_credentials and cred_buffer_chars < CREDENTIAL_BUFFER_CHAR_CAP:
-                    cred_buffer.append(normalized_line)
-                    cred_buffer_chars += len(normalized_line) + 1
+                if collect_credentials:
+                    # Hash from the original line, then keep only the redacted form in
+                    # the records that get persisted and indexed.
+                    if cred_buffer_chars < CREDENTIAL_BUFFER_CHAR_CAP:
+                        cred_buffer.append(normalized_line)
+                        cred_buffer_chars += len(normalized_line) + 1
+                    normalized_line = redact_secret_line(normalized_line)
 
                 if not stream_as_chunks:
                     record_number += 1

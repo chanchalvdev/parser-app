@@ -1,390 +1,342 @@
+<div align="center">
+
 # Enterprise File Ingestion Platform
 
-## What this project is
+**Upload a multi-GB dump of nested, password-protected archives and get back searchable,
+IOC-enriched records, with an audit trail and no plaintext secrets.**
 
-Enterprise File Ingestion Platform is a local-first scaffold for:
+[![CI](https://github.com/chanchalvdev/parser-app/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/chanchalvdev/parser-app/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/chanchalvdev/parser-app?color=10b981)](https://github.com/chanchalvdev/parser-app/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<br/>
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![OpenSearch](https://img.shields.io/badge/OpenSearch-2.13-005EB8?logo=opensearch&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker_Compose-9_services-2496ED?logo=docker&logoColor=white)
 
-- uploading files (presigned direct-to-object-store PUT, multi-GB capable)
-- recursively extracting archives (ZIP, RAR, TAR, TAR.GZ/TGZ, 7Z — including nested and password-protected)
-- parsing content into structured records (TXT/LOG, CSV, JSON/JSONL, generic text)
-- extracting entities/IOCs from every record (IPv4, emails, URLs, domains, timestamps, MD5/SHA1/SHA256, CVE IDs, Bitcoin addresses)
-- normalizing infostealer log dumps into unified credential records (secrets hashed, never stored in plaintext)
-- indexing parsed records into OpenSearch
-- monitoring jobs and files through a Go API + React dashboard
-- storing metadata/events in PostgreSQL and passing work through Redis
+<img src="docs/assets/demo.gif" alt="Demo: uploading a nested archive, searching parsed records, viewing hashed infostealer credentials, and unlocking an encrypted archive" width="900"/>
 
-The project is production-pattern aligned for a single-tenant local deployment and includes APIs, workers, dashboards, search, and security/audit hooks.
+<sub>Real recording of the local stack: nested ZIP → live progress → search · infostealer dump → hashed credentials · AES-encrypted ZIP → password unlock</sub>
 
-## Architecture (text)
+</div>
 
-```text
-Client (React Web)
-  -> Go API (:8080 in container, :8088 on host)
-     - writes metadata + jobs to PostgreSQL
-     - enqueues work in Redis
-     - issues presigned upload PUT URLs (MinIO via nginx proxy)
-     - exposes REST + /docs (Swagger)
-     -> PostgreSQL
-     -> Redis
-     -> MinIO
-     -> OpenSearch
+---
 
-Go API -> Worker Container
-  -> downloads uploaded file from MinIO
-  -> detects file type (extension + MIME + null-byte sampling; libmagic if installed)
-  -> extracts archives recursively under depth/count/size/expansion limits
-  -> parses and extracts records + entities
-  -> inserts parsed records in PostgreSQL (batched)
-  -> indexes parsed_records + files metadata in OpenSearch (batched)
-  -> emits job events, progress updates, and writes audit records
-  -> updates job progress/state
+## Contents
+
+- [The problem](#the-problem)
+- [What it does](#what-it-does)
+- [Architecture](#architecture)
+- [Engineering decisions](#engineering-decisions)
+- [Quick start](#quick-start)
+- [Supported formats and limits](#supported-formats-and-limits)
+- [API](#api)
+- [Testing and CI](#testing-and-ci)
+- [Project layout](#project-layout)
+- [Troubleshooting](#troubleshooting)
+- [Roadmap](#roadmap)
+
+## The problem
+
+Security, incident-response and threat-intel teams regularly receive data as **one huge,
+messy file**: a 5 GB ZIP that holds RARs that hold 7Zs, some of them encrypted, full of
+logs, CSV exports, JSON and infostealer credential dumps.
+
+Triaging that by hand looks like this:
+
+- **Slow and manual.** You unpack layer after layer, guess at encodings and `grep` through
+  millions of lines with no shared index.
+- **Unsafe.** A crafted archive (zip bomb, `../` path traversal) can fill the disk or write
+  outside the work directory. Credential dumps end up copied around in plaintext.
+- **Untraceable.** Nobody can say which file a finding came from, which nested archive
+  failed, or who changed a processing limit.
+- **Hard to scale.** Pushing multi-GB uploads through an application server ties up memory
+  and connections.
+
+## What it does
+
+This platform turns that dump into a structured, searchable dataset through one upload:
+
+| Capability | How |
+|---|---|
+| **Multi-GB uploads** | The browser PUTs straight to object storage with a presigned URL, so file bytes never pass through the API |
+| **Recursive extraction** | ZIP (incl. AES), RAR4/5, TAR, TAR.GZ/TGZ and 7Z, nested to any configured depth; every child file is tracked in a file tree |
+| **Password-protected archives** | The job pauses in `PASSWORD_REQUIRED`, the analyst unlocks it from the UI, and processing resumes; wrong attempts are recorded |
+| **Parsing** | TXT/LOG, CSV (delimiter sniffing), JSON and JSONL, generic text fallback; large files stream in chunks |
+| **IOC enrichment** | IPv4, emails, URLs, domains, timestamps, MD5/SHA1/SHA256, CVE IDs and Bitcoin addresses extracted from every record |
+| **Infostealer awareness** | Recognises `Passwords.txt`, `Cookies/`, `Autofills/` and similar files, normalises credential blocks across stealer families, and stores passwords **only as SHA-256** (raw lines are redacted before they are persisted or indexed) |
+| **Search** | Records and file metadata indexed in OpenSearch, with search and suggestions in the API and a per-job search in the UI |
+| **Safety guards** | Depth, file-count, total-size and expansion-ratio limits (zip-bomb guard), path-traversal checks, binary detection |
+| **Observability** | Live progress, per-stage job events, parser-error records, audit log and a 7-endpoint dashboard API |
+| **Runtime config** | Limits live in a `system_settings` table, editable through an admin-only API without a redeploy |
+
+## Architecture
+
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="Architecture: React UI and Go API on top, MinIO, Redis, PostgreSQL and OpenSearch in the middle, Python worker pipeline at the bottom" width="100%"/>
+</p>
+
+<sub>Source: [`docs/assets/architecture.svg`](docs/assets/architecture.svg)</sub>
+
+Three tiers, each independently scalable:
+
+1. **Control plane.** A **Go API** handles uploads, jobs, files, search, dashboard and admin
+   settings. It never streams file bytes.
+2. **Data plane.** **MinIO** (behind an nginx proxy tuned for large bodies) holds raw
+   objects, **Redis** is the job queue, **PostgreSQL** is the source of truth, and
+   **OpenSearch** is the search surface.
+3. **Processing.** A **Python worker** pulls jobs from Redis and runs a streaming
+   pipeline: detect → extract (recursively) → parse → enrich → batched load.
+
+### Request lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Analyst
+    participant UI as React UI
+    participant API as Go API
+    participant S3 as MinIO
+    participant Q as Redis
+    participant W as Python Worker
+    participant PG as PostgreSQL
+    participant OS as OpenSearch
+
+    A->>UI: choose file (optionally a password)
+    UI->>API: POST /uploads/initiate
+    API->>PG: insert upload row
+    API-->>UI: presigned PUT URL
+    UI->>S3: PUT file bytes (multi-GB, bypasses API)
+    UI->>API: POST /uploads/complete
+    API->>PG: create file + job (queued)
+    API->>Q: RPUSH job
+    W->>Q: BLPOP job
+    W->>S3: download object
+    loop every file, recursively for archives
+        W->>W: detect type → extract → parse → extract IOCs
+        W->>S3: store extracted children
+        W->>PG: batched INSERT records, job events, progress
+        W->>OS: bulk index records
+    end
+    W->>PG: job completed / failed / PASSWORD_REQUIRED
+    UI->>API: poll job, records, search
 ```
 
+### Job lifecycle
+
 ```text
-Core data stores/services
-- PostgreSQL: authoritative metadata, jobs, events, audit logs, settings
-- Redis: job queue and work orchestration
-- MinIO: raw object payloads (fronted by nginx for large-body PUTs)
-- OpenSearch: parsed record + file search surface
+queued ──▶ running ──▶ completed
+                  ├──▶ failed               root parse/extract error (child errors are recorded, not fatal)
+                  ├──▶ PASSWORD_REQUIRED    encrypted archive → POST /files/{id}/password → queued
+                  └──▶ WRONG_PASSWORD       submitted password rejected, attempt recorded
 ```
 
-## Tech stack
+## Engineering decisions
 
-- Go 1.23 (HTTP API, queue producer/consumers adapters)
-- Python 3.11 (worker orchestrator/parsers/extractors/loaders)
-- React 18 + TypeScript + Vite 6 + Tailwind (UI)
-- PostgreSQL 16
-- Redis 7
-- MinIO (S3-compatible storage) + nginx 1.27 proxy
-- OpenSearch 2.13 + Dashboards
-- Docker Compose + Make
+| Decision | Why |
+|---|---|
+| **Presigned direct-to-storage upload** | A 10 GB upload costs the API one small JSON request instead of 10 GB of buffered I/O. nginx in front of MinIO sets `client_max_body_size` and streaming timeouts. |
+| **Queue between API and worker** | Uploads stay fast while parsing is slow. Parsing runs in its own service that scales independently of the API, and job state lives in Postgres, not in the worker. |
+| **Polyglot by fit** | Go for a small, concurrent HTTP surface. Python for the parsing ecosystem (`py7zr`, `rarfile`, `pyzipper`, `ijson`, `charset-normalizer`). |
+| **Streaming and batching everywhere** | Large text is chunked and JSON is parsed incrementally (`ijson`). Records are inserted and indexed in batches (`parser_batch_size`, `search_index_batch_size`). |
+| **Failure isolation** | A corrupt child inside an archive becomes a `parser_errors` row. Only a root failure fails the job. |
+| **Defence in depth on archives** | Every member path is normalised and rejected if absolute or traversing. Size, count, depth and expansion-ratio caps are enforced during extraction, not after. |
+| **Secrets never at rest** | Stealer passwords are hashed into `secret_hash`, and the raw `PASS:` lines are rewritten to `[REDACTED sha256:<12 hex>]` before storage, so analysts can still correlate them. |
+| **Postgres as the source of truth, OpenSearch as a projection** | Records are committed to Postgres first. An OpenSearch failure is recorded as an `INDEXING_FAILED` job event instead of losing data. |
+| **Settings in the database** | Operators tune limits per tenant through `PUT /api/v1/admin/settings` (admin role), with no restart needed. |
 
-## Local quick start
+## Quick start
+
+**Prerequisites:** Docker with Compose v2 (Docker Desktop: allocate **≥ 6 GB RAM**, since OpenSearch is memory-hungry) and `make`.
+Go, Python and Node are only needed to run tests outside containers.
 
 ```bash
-cp .env.example .env
-make up
-make migrate
-make seed
-make search-init
+git clone https://github.com/chanchalvdev/parser-app.git
+cd parser-app
+cp .env.example .env          # local-only defaults; change every secret before any shared deployment
+
+make up                       # build + start all 9 services
+make migrate                  # apply SQL migrations
+make seed                     # default tenant + system_settings
+make search-init              # create OpenSearch indexes
 ```
 
-Open:
-- Web UI: `http://localhost:5188`
-- API health: `http://localhost:8088/health`
-- API docs: `http://localhost:8088/docs`
-- OpenSearch: `http://localhost:9200`
+Then open:
 
-## Services and ports
+| What | URL |
+|---|---|
+| **Web UI** | http://localhost:5188 |
+| API health | http://localhost:8088/health |
+| **Interactive API docs (Swagger)** | http://localhost:8088/docs |
+| OpenSearch | http://localhost:9200 |
+| OpenSearch Dashboards | http://localhost:5601 |
+| MinIO console | http://localhost:9001 |
 
-Host port on the left, container port on the right.
+### Try it
 
-| Service | Host | Container |
+```bash
+# Build sample archives (ZIP, nested ZIP, TAR.GZ; plus 7Z and AES-encrypted ZIP if py7zr/pyzipper are installed)
+pip install py7zr pyzipper   # optional
+python3 infra/scripts/create_sample_archives.py
+
+# Scripted end-to-end check: upload → parse → search assertions
+make e2e-upload
+```
+
+In the UI, upload `tests/fixtures/sample_nested.zip` to watch recursive extraction, then
+`tests/fixtures/password_sample.zip` (password `changeme`) to try the unlock flow.
+
+<details>
+<summary><b>Services and ports</b></summary>
+
+| Service | Host port | Container port |
 |---|---|---|
+| `web` (React + Vite) | 5188 | 5173 |
+| `api` (Go) | 8088 | 8080 |
+| `worker` (Python) | none | none |
 | `postgres` | 5434 | 5432 |
 | `redis` | 6379 | 6379 |
 | `minio-proxy` (nginx → MinIO S3 API) | 9000 | 9000 |
 | `minio` console | 9001 | 9001 |
 | `opensearch` | 9200 | 9200 |
 | `opensearch-dashboards` | 5601 | 5601 |
-| `api` | 8088 | 8080 |
-| `worker` | — (no host port) | — |
-| `web` | 5188 | 5173 |
 
-The MinIO S3 API is not published directly; all client PUTs go through `minio-proxy`, which sets
-`client_max_body_size` and streaming timeouts sized for multi-GB uploads.
+The MinIO S3 API is only reachable through `minio-proxy`.
+</details>
 
-## Supported formats
+<details>
+<summary><b>Make targets</b></summary>
 
-### Archives (recursive, nested)
-`.zip` · `.rar` · `.tar` · `.tar.gz` / `.tgz` · `.7z`
+```bash
+make up / down / ps / logs / restart   # stack lifecycle
+make clean                             # down -v + remove caches (destroys local data)
+make migrate / seed / search-init      # database + index bootstrap
+make test-api                          # go test ./...
+make test-worker                       # pytest
+make test-web                          # vitest
+make test-all                          # all three
+make e2e-upload                        # live upload → parse → search smoke test
+make fmt                               # gofmt + web build
+```
+</details>
 
-Password-protected archives are supported: the job parks in `PASSWORD_REQUIRED`, the UI/API submits
-a password via `POST /api/v1/files/{file_id}/password`, and processing resumes. Wrong passwords are
-recorded as attempts against `archive_password_refs`.
+## Supported formats and limits
 
-### Parsers
-Selected in order by `ParserRegistry` (`apps/worker/app/parsers/registry.py`):
+**Archives:** `.zip` (ZipCrypto and AES) · `.rar` (RAR4/RAR5) · `.tar` · `.tar.gz` / `.tgz` · `.7z`. All can be nested and password-protected.
 
-| Parser | Extensions / hints | Status |
+| Parser | Handles | Status |
 |---|---|---|
-| `txt` | `txt`, `log`, `out`, `err`, `text/plain` | implemented |
-| `csv` | `csv` (delimiter sniffing, header cleaning) | implemented |
-| `json` | `json`, `jsonl` | implemented |
-| `generic_text` | fallback for anything text-like | implemented |
-| `xml` | `xml` | **scaffold** — raises `UnsupportedParserError` |
-| `excel` | `xlsx` | **scaffold** — raises `UnsupportedParserError` |
-| `pdf` | `pdf` | **scaffold** — raises `UnsupportedParserError` |
+| `txt` | `txt`, `log`, `out`, `err`, `text/plain` + infostealer routing | ✅ implemented |
+| `csv` | `csv` (delimiter sniffing, header cleaning) | ✅ implemented |
+| `json` | `json`, `jsonl` (streaming) | ✅ implemented |
+| `generic_text` | anything text-like | ✅ implemented |
+| `xml` · `excel` · `pdf` | `xml`, `xlsx`, `pdf` | 🚧 registered scaffolds: raise `UnsupportedParserError` |
 
-The three scaffolded parsers are registered and claim their extensions, but their `parse()` raises
-`UnsupportedParserError("... implementation is intentionally deferred")`. Uploading an `.xml`,
-`.xlsx`, or `.pdf` therefore produces a `NO_PARSER_FOUND` parser error rather than records. The
-`enabled_parsers` setting seeded in `system_settings` lists them for forward compatibility; it does
-not imply a working implementation.
+Detection uses extension, MIME and null-byte sampling (plus libmagic if installed).
+Unparseable files are recorded with `NO_PARSER_FOUND` instead of failing the job.
 
-Files with no matching parser and no text-like signature fail with `NO_PARSER_FOUND` and are recorded
-in `parser_errors` — a child failure does not abort the whole job, only a root failure does.
+**Runtime limits** (seeded into `system_settings`, editable via the admin API):
 
-### Entity / IOC extraction
-Every text record is scanned for: `ipv4`, `emails`, `urls`, `domains`, `timestamps`,
-`md5_like_hashes`, `sha1_like_hashes`, `sha256_like_hashes`, `cve`, `bitcoin_addresses`.
-
-### Infostealer log handling
-`apps/worker/app/parsers/infostealer.py` adds stealer-log awareness on top of the TXT parser:
-
-- **Filename/directory routing** — `Passwords.txt`, `UserInformation.txt`, `InstalledSoftware.txt`,
-  `ProcessList.txt`, `Cookies/`, `Autofills/`, `FileGrabber/` etc. are tagged with a
-  `stealer_category` in `structured_data`.
-- **Credential-block grammar** — repeated `KEY: value` blocks are normalized across stealer families
-  (`SOFT`/`URL`/`USER`/`PASS` and their many spellings), including leetspeak folding so `P455W0RD`
-  resolves to `password`.
-- **Secret safety** — passwords are SHA-256 hashed into `secret_hash`. Plaintext secrets are never
-  persisted or indexed.
-- Password dumps additionally emit one consolidated `stealer_credential` record per file, because
-  small files are parsed line-by-line and multi-line blocks would otherwise never assemble.
-
-## Limits and settings
-
-Runtime limits are read per tenant from `system_settings` (seeded by `make seed`, editable via
-`PUT /api/v1/admin/settings`):
-
-| Setting | Seeded default |
+| Setting | Default |
 |---|---|
 | `max_upload_size_mb` | 10240 (10 GB) |
 | `max_archive_depth` | 20 |
-| `max_extracted_files` | 1000000 |
+| `max_extracted_files` | 1,000,000 |
 | `max_extracted_size_mb` | 102400 |
 | `max_expansion_ratio` | 100 |
-| `txt_small_file_limit_mb` | 10 |
-| `parser_batch_size` | 1000 |
-| `search_index_batch_size` | 1000 |
-| `enabled_parsers` | txt, log, csv, json, jsonl, xml, xlsx, pdf, text |
+| `txt_small_file_limit_mb` | 10 (above this, text is chunked) |
+| `parser_batch_size` / `search_index_batch_size` | 1000 / 1000 |
 
-Expansion-ratio and file-count limits are the zip-bomb guard; exceeding them fails the job with an
-`ArchiveLimitsExceededError` at the `archive_extract` stage.
+Exceeding an extraction limit fails the job with `ArchiveLimitsExceededError` at the `archive_extract` stage.
 
-## API endpoints
+## API
 
-### Core
-- `GET /health`
-- `GET /ready`
-- `GET /api/v1/version`
-- `GET /docs`
-- `GET /docs/openapi.json`
+Full interactive reference: **http://localhost:8088/docs** (OpenAPI JSON at `/docs/openapi.json`).
 
-### Upload
-- `POST /api/v1/uploads/initiate`
-- `POST /api/v1/uploads/complete`
-- `GET /api/v1/uploads/{upload_id}`
-
-### Files
-- `GET /api/v1/files`
-- `GET /api/v1/files/{file_id}`
-- `POST /api/v1/files/{file_id}/password`
-- `GET /api/v1/files/{file_id}/children`
-- `GET /api/v1/files/{file_id}/tree`
-- `GET /api/v1/files/{file_id}/records`
-
-### Jobs
-- `GET /api/v1/jobs`
-- `GET /api/v1/jobs/{job_id}`
-- `GET /api/v1/jobs/{job_id}/events`
-- `GET /api/v1/jobs/{job_id}/records`
-- `POST /api/v1/jobs/{job_id}/retry`
-
-### Search
-- `GET /api/v1/search`
-- `POST /api/v1/search`
-- `GET /api/v1/search/suggestions`
-
-### Dashboard
-- `GET /api/v1/dashboard/summary`
-- `GET /api/v1/dashboard/file-types`
-- `GET /api/v1/dashboard/processing-status`
-- `GET /api/v1/dashboard/upload-volume`
-- `GET /api/v1/dashboard/error-breakdown`
-- `GET /api/v1/dashboard/entities`
-- `GET /api/v1/dashboard/processing-duration`
-
-### Admin
-Both routes require the `admin` role (`middleware.RequireRole("admin")`).
-- `GET /api/v1/admin/settings`
-- `PUT /api/v1/admin/settings`
-
-## API docs
-
-Interactive API documentation is available at:
-- `http://localhost:8088/docs`
-
-OpenAPI JSON is at:
-- `http://localhost:8088/docs/openapi.json`
-
-## Development workflow
-
-1. Edit code under `apps/api`, `apps/worker`, or `apps/web`.
-2. Rebuild containers when needed:
+| Area | Endpoints |
+|---|---|
+| Health | `GET /health` · `GET /ready` · `GET /api/v1/version` |
+| Uploads | `POST /api/v1/uploads/initiate` · `POST /api/v1/uploads/complete` · `GET /api/v1/uploads/{id}` |
+| Files | `GET /api/v1/files` · `GET /files/{id}` · `GET /files/{id}/children` · `GET /files/{id}/tree` · `GET /files/{id}/records` · `POST /files/{id}/password` |
+| Jobs | `GET /api/v1/jobs` · `GET /jobs/{id}` · `GET /jobs/{id}/events` · `GET /jobs/{id}/records` · `POST /jobs/{id}/retry` |
+| Search | `GET` / `POST /api/v1/search` · `GET /api/v1/search/suggestions` |
+| Dashboard | `summary` · `file-types` · `processing-status` · `upload-volume` · `error-breakdown` · `entities` · `processing-duration` |
+| Admin (role `admin`) | `GET` / `PUT /api/v1/admin/settings` |
 
 ```bash
-make restart
+curl -s localhost:8088/api/v1/dashboard/summary | jq
+# {"total_uploads":10,"total_files":29,"total_extracted_files":28,"total_parsed_records":122,"completed_jobs":9, ...}
 ```
 
-3. Review logs for behavior:
+## Testing and CI
 
-```bash
-docker compose logs -f api
-docker compose logs -f worker
-```
+| Suite | Command | Coverage |
+|---|---|---|
+| Go API | `make test-api` | handlers, services, repositories (19 tests) + `go vet` in CI |
+| Python worker | `make test-worker` | archive safety (traversal, limits, 7z, AES zip), file detection, CSV/JSON parsers, entity extraction, infostealer grammar and redaction, FIFO queue order (37 tests) |
+| Web | `make test-web` | Vitest + production build |
+| End-to-end | `make e2e-upload` | live upload → worker → Postgres → OpenSearch assertions |
 
-4. Refresh fixtures and index initialization when storage/search state changes:
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs the API, worker and web jobs on every push to `master`, every pull request and every version tag.
 
-```bash
-make seed
-make search-init
-```
-
-5. Run local tests and checks:
-
-```bash
-make test-api      # Go: go test ./...
-make test-worker   # Python: pytest -q tests
-make test-web      # Frontend: vitest run
-make lint
-```
-
-## Common commands
-
-```bash
-make up            # start stack
-make down          # stop stack
-make ps            # status
-make logs          # follow logs (all services)
-make restart       # restart services
-make clean         # remove containers + known local cache dirs
-make migrate       # apply schema migrations
-make seed          # seed default rows
-make search-init   # create OpenSearch mappings
-make test          # legacy test entry (infra/scripts/test.sh)
-make test-api      # Go API tests
-make test-worker   # Python worker tests
-make test-web      # Frontend tests
-make test-all      # api + worker + web
-make e2e-upload    # end-to-end upload/parse/search smoke test
-make lint          # lint placeholders and check messages
-make fmt           # formatting helpers used by existing scripts
-```
-
-## End-to-end demo
-
-1. Start services and initialize dependencies:
-
-```bash
-make up && make migrate && make seed && make search-init
-```
-
-2. Generate sample fixtures:
-
-```bash
-python3 infra/scripts/create_sample_archives.py
-```
-
-3. Open the UI `http://localhost:5188` and upload `tests/fixtures/sample.txt`.
-4. Confirm:
-- upload job created
-- file status transitions in Job details
-- parsed records are searchable
-- dashboard summary updates
-
-### Reusable local E2E upload smoke test
-
-Run a local end-to-end upload+parse+search check with a dummy file:
-
-```bash
-make e2e-upload
-```
-
-Defaults:
-- dummy file: `/tmp/e2e-dummy-upload.txt`
-- API base: `http://localhost:8080/api/v1`
-- timeout: 180s
-
-Environment overrides:
-- `API_BASE_URL` (set to `http://localhost:8088/api/v1` to match the published host port)
-- `API_KEY` (if API auth is enabled)
-- `DUMMY_FILE_PATH`
-- `DUMMY_FILE_NAME`
-- `SEARCH_ASSERTIONS` (space-separated queries)
-- `JOB_TIMEOUT_SECONDS`
-- `POLL_INTERVAL_SECONDS`
-
-## Job lifecycle
+## Project layout
 
 ```text
-queued -> running -> completed
-                  -> failed              (root parse/extract error)
-                  -> PASSWORD_REQUIRED   (encrypted archive, awaiting password)
-                  -> WRONG_PASSWORD      (submitted password rejected)
+apps/
+  api/        Go HTTP API: handlers → services → repositories, OpenAPI docs
+  worker/     Python worker: queue consumer, orchestrator, extractors/, parsers/, loaders
+  web/        React + Vite + Tailwind dashboard
+infra/
+  migrations/ SQL schema + seed
+  opensearch/ index mappings bootstrap
+  docker/     nginx config for the MinIO proxy
+  scripts/    migrate / seed / sample-archive helpers
+scripts/      e2e-upload.sh
+tests/        fixtures (sample logs, CSV, JSON, synthetic stealer dump, nested archive source)
+docs/         architecture diagram, demo, design notes (docs/plans/)
 ```
 
-Progress reporting: `mark_job_running` sets 5%; parsing occupies the 10%–90% band and approaches 90%
-asymptotically as records stream (total record count is unknown mid-stream); `mark_job_completed`
-sets 100%. Progress updates are best-effort and never fail a job.
-
-Job events emitted per file: `worker.started`, `worker.detected_file_type`, `worker.extracted_file`,
-`PARSING_STARTED`, `PARSING_PROGRESS`, `PARSING_COMPLETED`, `PARSING_ERROR`, `INDEXING_COMPLETED`,
-`INDEXING_FAILED`, `worker.completed`, plus the failure/password variants.
-
-## Repository layout
-
-```text
-apps/api/          Go HTTP API (handlers -> services -> repositories)
-apps/worker/       Python worker (queue consumer, orchestrator, extractors, parsers, loaders)
-apps/web/          React + Vite dashboard
-infra/migrations/  SQL schema + seed
-infra/opensearch/  index mapping bootstrap
-infra/docker/      nginx MinIO proxy config
-infra/scripts/     migrate / seed / test / fixture helpers
-scripts/           e2e-upload.sh
-tests/fixtures/    sample TXT/CSV/JSON/JSONL/LOG + nested archive source
-docs/plans/        design + implementation plan notes
-```
-
-## Documentation
-
-- [System usage guide](docs/plans/system-usage-guide.md)
-- [5 GB upload plan](docs/plans/plan-5gb-uploads.md)
-- [Live status + eye icon plan](docs/plans/plan-live-status-and-eye-icon.md)
-- [UX redesign spec](docs/plans/ux-redesign-spec.md)
+Design notes: [system usage guide](docs/plans/system-usage-guide.md) ·
+[5 GB upload plan](docs/plans/plan-5gb-uploads.md) ·
+[live status plan](docs/plans/plan-live-status-and-eye-icon.md) ·
+[UX redesign spec](docs/plans/ux-redesign-spec.md)
 
 ## Troubleshooting
 
-- API/Ready failing:
-  - `docker compose logs api`
-  - `docker compose logs postgres`
-  - Check `DATABASE_URL` in `.env`
-- Worker idle/no job progress:
-  - `docker compose logs worker`
-  - confirm queue list not empty (`redis-cli -h 127.0.0.1 -p 6379 LLEN ingestion_jobs`) in container
-- Presigned upload failures:
-  - ensure the MinIO bucket exists and `minio-proxy` is healthy
-  - check `MINIO_*` settings in `.env` — `MINIO_PRESIGN_ENDPOINT` must be reachable from the browser
-  - for large files, confirm `client_max_body_size` in `infra/docker/minio-proxy.conf`
-- Upload rejected as too large:
-  - `max_upload_size_mb` in `system_settings` is the load-bearing limit, not `.env`
-  - check via `GET /api/v1/admin/settings`
-- Search returns empty:
-  - open `http://localhost:9200/_cat/indices?v`
-  - confirm search documents indexed and `make search-init` run after `opensearch` restart
-- CORS issues:
-  - verify frontend `VITE_API_BASE_URL` and API `ALLOWED_ORIGINS` both reference `http://localhost:5188`
-  - check browser network console for preflight errors
-- Docker memory:
-  - reduce concurrent workload, increase Docker memory limit, inspect OOM logs in `docker compose logs`
+<details>
+<summary>Expand</summary>
+
+- **API not ready:** `docker compose logs api postgres`; check `DATABASE_URL` in `.env`.
+- **Jobs stuck in `queued`:** `docker compose logs worker`; check the queue with
+  `docker exec file-platform-redis redis-cli LLEN ingestion_jobs`.
+- **Upload fails in the browser:** `MINIO_PRESIGN_ENDPOINT` must be reachable from the browser
+  (default `http://localhost:9000`), and `minio-proxy` must be healthy.
+- **"File too large":** `max_upload_size_mb` in `system_settings` is the effective limit;
+  check `GET /api/v1/admin/settings`.
+- **Search returns nothing:** `curl localhost:9200/_cat/indices?v`. Re-run `make search-init`
+  after wiping OpenSearch data.
+- **CORS errors:** `ALLOWED_ORIGINS` (API) must include `http://localhost:5188`, and
+  `VITE_API_BASE_URL` (web) must be `http://localhost:8088/api/v1`. Both are set in `.env.example`.
+- **`make migrate` says "relation already exists":** the named volumes already hold a migrated
+  database. Skip it, or `make clean` to start from scratch.
+- **Containers OOM / OpenSearch exits:** give Docker more memory (≥ 6 GB).
+</details>
 
 ## Roadmap
 
-- Hardening RBAC for `/admin` and optional secured `audit log` surfaces
-- Expand parser coverage and parser-fallback safety checks
-- Add worker and API metrics endpoints
-- Improve archive parser observability and recovery workflows
-- Introduce long-form job-level search filters and export endpoints
-- Add full CI test matrix and code-quality gates
+- [ ] Implement the XML, XLSX and PDF parsers (scaffolds are already registered)
+- [ ] Prometheus metrics for API and worker (queue depth, stage latency, records/sec)
+- [ ] Export endpoints (CSV/JSON) for search results and credential sets
+- [ ] Multi-tenant auth end to end (tenant scoping exists in schema and settings)
+- [ ] Linting gates (golangci-lint, ruff, eslint) in CI
+
+## Author
+
+Built by **Chanchal** ([@chanchalvdev](https://github.com/chanchalvdev)). Issues and PRs are welcome.
+
+## License
+
+[MIT](LICENSE)

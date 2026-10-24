@@ -59,6 +59,9 @@ class SevenZipExtractor(BaseArchiveExtractor):
 
                     destination = Path(destination_dir) / member_name
                     destination.parent.mkdir(parents=True, exist_ok=True)
+                    # py7zr leaves the read position at the end of the previous extract;
+                    # without a reset, every member after the first fails its CRC check.
+                    archive.reset()
                     archive.extract(path=destination_dir, targets=[member_name])
 
                     size_bytes = destination.stat().st_size if destination.exists() else 0

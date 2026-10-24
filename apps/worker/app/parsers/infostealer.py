@@ -77,6 +77,25 @@ def _hash_secret(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8", errors="ignore")).hexdigest()
 
 
+REDACTED_MARKER = "[REDACTED sha256:"
+
+
+def redact_secret_line(line: str) -> str:
+    """Replace the value of a password line with a short hash reference.
+
+    Raw lines of a password dump are persisted and indexed as records, so the
+    secret must not survive in them. The 12-char digest prefix still lets an
+    analyst correlate the line with the consolidated credential record.
+    """
+    match = _CRED_LINE_RE.match(line)
+    if not match or _normalize_prefix(match.group(1)) != "password":
+        return line
+    value = match.group(2).strip().strip('"').strip("'")
+    if not value or value.startswith(REDACTED_MARKER):
+        return line
+    return f"{match.group(1).strip()}: {REDACTED_MARKER}{_hash_secret(value)[:12]}]"
+
+
 def parse_credential_blocks(text: str) -> list[dict[str, Any]]:
     """Parse stealer-style credential blocks into unified records.
 
@@ -103,7 +122,7 @@ def parse_credential_blocks(text: str) -> list[dict[str, Any]]:
             continue
         field = _normalize_prefix(match.group(1))
         value = match.group(2).strip().strip('"').strip("'")
-        if not field or not value:
+        if not field or not value or value.startswith(REDACTED_MARKER):
             continue
         marker = "secret_hash" if field == "password" else field
         if marker in current:

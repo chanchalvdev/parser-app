@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker>
+    <marker id="a-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4ade80"/></marker>
+    <marker id="a-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#fbbf24"/></marker>
+    <marker id="a-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f87171"/></marker>
+    <marker id="a-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c084fc"/></marker>
+    <style>
+      .t { fill: #f1f5f9; font-size: 19px; font-weight: 700; }
+      .s { fill: #cbd5e1; font-size: 14px; }
+      .m { fill: #94a3b8; font-size: 13px; font-family: 'JetBrains Mono', Menlo, Consolas, monospace; }
+      .lbl { fill: #e2e8f0; font-size: 13px; font-weight: 600; paint-order: stroke; stroke: #0b1020; stroke-width: 6px; stroke-linejoin: round; }
+      .tier { fill: #64748b; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .chip { fill: #0f2a1a; stroke: #166534; }
+      .chipt { fill: #bbf7d0; font-size: 13px; font-weight: 600; }
+      .chips { fill: #86efac; font-size: 12px; }
+      .step { fill: #241240; stroke: #7e22ce; stroke-width: 1.5; }
+      .stept { fill: #f3e8ff; font-size: 16px; font-weight: 700; }
+      .steps { fill: #d8b4fe; font-size: 13px; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#0b1020"/>
+
+  <!-- Title -->
+  <text x="40" y="52" fill="#f8fafc" font-size="28" font-weight="800">Enterprise File Ingestion Platform</text>
+  <text x="40" y="80" fill="#94a3b8" font-size="16">upload → extract → parse → enrich → index → search</text>
+
+  <!-- Tier labels -->
+  <text class="tier" x="40" y="112">CLIENT &amp; CONTROL PLANE</text>
+  <text class="tier" x="40" y="352">DATA PLANE</text>
+  <text class="tier" x="40" y="592">PROCESSING</text>
+
+  <!-- Tier 1 -->
+  <rect x="40" y="152" width="170" height="60" rx="30" fill="#1e293b" stroke="#475569"/>
+  <text class="t" x="125" y="188" text-anchor="middle" font-size="16">Analyst</text>
+
+  <rect x="290" y="124" width="350" height="140" rx="14" fill="#0f1e3d" stroke="#3b82f6" stroke-width="1.5"/>
+  <text class="t" x="314" y="160">Web UI</text>
+  <text class="m" x="616" y="160" text-anchor="end">:5188</text>
+  <text class="s" x="314" y="188">React 18 · TypeScript · Vite · Tailwind</text>
+  <text class="s" x="314" y="212">Upload · live job progress · records</text>
+  <text class="s" x="314" y="236">Search · password unlock</text>
+
+  <rect x="760" y="124" width="800" height="140" rx="14" fill="#0a1f14" stroke="#22c55e" stroke-width="1.5"/>
+  <text class="t" x="784" y="160">Go 1.23 API</text>
+  <text class="m" x="1536" y="160" text-anchor="end">:8088 · OpenAPI at /docs</text>
+  <rect class="chip" x="784" y="182" width="140" height="56" rx="8"/><text class="chipt" x="854" y="206" text-anchor="middle">Uploads</text><text class="chips" x="854" y="226" text-anchor="middle">presign · complete</text>
+  <rect class="chip" x="938" y="182" width="140" height="56" rx="8"/><text class="chipt" x="1008" y="206" text-anchor="middle">Jobs &amp; Files</text><text class="chips" x="1008" y="226" text-anchor="middle">tree · retry · pw</text>
+  <rect class="chip" x="1092" y="182" width="140" height="56" rx="8"/><text class="chipt" x="1162" y="206" text-anchor="middle">Search</text><text class="chips" x="1162" y="226" text-anchor="middle">query · suggest</text>
+  <rect class="chip" x="1246" y="182" width="140" height="56" rx="8"/><text class="chipt" x="1316" y="206" text-anchor="middle">Dashboard</text><text class="chips" x="1316" y="226" text-anchor="middle">7 aggregates</text>
+  <rect class="chip" x="1400" y="182" width="136" height="56" rx="8"/><text class="chipt" x="1468" y="206" text-anchor="middle">Admin</text><text class="chips" x="1468" y="226" text-anchor="middle">RBAC settings</text>
+
+  <!-- Tier 2: stores -->
+  <g>
+    <rect x="40" y="372" width="350" height="110" rx="14" fill="#2a1a05" stroke="#f59e0b" stroke-width="1.5"/>
+    <text class="t" x="64" y="406">MinIO</text><text class="m" x="366" y="406" text-anchor="end">via nginx :9000</text>
+    <text class="s" x="64" y="434">S3-compatible object storage</text>
+    <text class="s" x="64" y="458">raw uploads + extracted children</text>
+  </g>
+  <g>
+    <rect x="430" y="372" width="350" height="110" rx="14" fill="#2a0b0b" stroke="#ef4444" stroke-width="1.5"/>
+    <text class="t" x="454" y="406">Redis 7</text><text class="m" x="756" y="406" text-anchor="end">:6379</text>
+    <text class="s" x="454" y="434">job queue  <tspan class="m">ingestion_jobs</tspan></text>
+    <text class="s" x="454" y="458">decouples API from processing</text>
+  </g>
+  <g>
+    <rect x="820" y="372" width="350" height="110" rx="14" fill="#2a1a05" stroke="#f59e0b" stroke-width="1.5"/>
+    <text class="t" x="844" y="406">PostgreSQL 16</text><text class="m" x="1146" y="406" text-anchor="end">:5434</text>
+    <text class="s" x="844" y="434">uploads · jobs · files · records</text>
+    <text class="s" x="844" y="458">job_events · audit · settings</text>
+  </g>
+  <g>
+    <rect x="1210" y="372" width="350" height="110" rx="14" fill="#2a1a05" stroke="#f59e0b" stroke-width="1.5"/>
+    <text class="t" x="1234" y="406">OpenSearch 2.13</text><text class="m" x="1536" y="406" text-anchor="end">:9200</text>
+    <text class="s" x="1234" y="434">parsed-records + files indexes</text>
+    <text class="s" x="1234" y="458">+ Dashboards :5601</text>
+  </g>
+
+  <!-- Tier 3: worker -->
+  <rect x="40" y="612" width="1520" height="290" rx="18" fill="#140a24" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text class="t" x="360" y="646">Python 3.11 Worker</text>
+  <text class="s" x="548" y="646">streaming pipeline · one job per queue message · child failures don't abort the root</text>
+
+  <rect class="step" x="64" y="676" width="268" height="130" rx="12"/>
+  <text class="stept" x="84" y="708">① Dequeue &amp; fetch</text>
+  <text class="steps" x="84" y="736">BLPOP from Redis (FIFO)</text>
+  <text class="steps" x="84" y="758">stream object from MinIO</text>
+
+  <rect class="step" x="362" y="676" width="268" height="130" rx="12"/>
+  <text class="stept" x="382" y="708">② Detect type</text>
+  <text class="steps" x="382" y="736">extension · MIME</text>
+  <text class="steps" x="382" y="758">null-byte sampling</text>
+  <text class="steps" x="382" y="780">(libmagic if present)</text>
+
+  <rect class="step" x="660" y="676" width="268" height="130" rx="12"/>
+  <text class="stept" x="680" y="708">③ Extract archives</text>
+  <text class="steps" x="680" y="736">ZIP (AES) · RAR · TAR · TGZ · 7Z</text>
+  <text class="steps" x="680" y="758">recursive, password-aware</text>
+  <text class="steps" x="680" y="780">depth · count · size · ratio caps</text>
+
+  <rect class="step" x="958" y="676" width="268" height="130" rx="12"/>
+  <text class="stept" x="978" y="708">④ Parse &amp; enrich</text>
+  <text class="steps" x="978" y="736">TXT/LOG · CSV · JSON(L)</text>
+  <text class="steps" x="978" y="758">IOCs: IP · URL · hash · CVE · BTC</text>
+  <text class="steps" x="978" y="780">stealer logs → hashed creds</text>
+
+  <rect class="step" x="1256" y="676" width="280" height="130" rx="12"/>
+  <text class="stept" x="1276" y="708">⑤ Load &amp; report</text>
+  <text class="steps" x="1276" y="736">batched INSERT + bulk index</text>
+  <text class="steps" x="1276" y="758">progress · job events · audit</text>
+  <text class="steps" x="1276" y="780">completed / failed / PW_REQ</text>
+
+  <!-- step chain -->
+  <path d="M332,741 H356" stroke="#c084fc" stroke-width="2.2" fill="none" marker-end="url(#a-violet)"/>
+  <path d="M630,741 H654" stroke="#c084fc" stroke-width="2.2" fill="none" marker-end="url(#a-violet)"/>
+  <path d="M928,741 H952" stroke="#c084fc" stroke-width="2.2" fill="none" marker-end="url(#a-violet)"/>
+  <path d="M1226,741 H1250" stroke="#c084fc" stroke-width="2.2" fill="none" marker-end="url(#a-violet)"/>
+  <!-- nested loop -->
+  <path d="M794,806 C794,866 496,866 496,812" stroke="#c084fc" stroke-width="1.8" stroke-dasharray="6 5" fill="none" marker-end="url(#a-violet)"/>
+  <text class="lbl" x="645" y="862" text-anchor="middle" fill="#d8b4fe">each extracted child re-enters detection</text>
+
+  <!-- Tier 1 edges -->
+  <path d="M210,182 H284" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#a-slate)"/>
+  <path d="M640,194 H754" stroke="#4ade80" stroke-width="2.2" fill="none" marker-end="url(#a-green)"/>
+  <text class="lbl" x="697" y="184" text-anchor="middle">REST</text>
+
+  <!-- Web → MinIO direct upload -->
+  <path d="M400,264 V312 H215 V366" stroke="#fbbf24" stroke-width="2.6" fill="none" marker-end="url(#a-amber)"/>
+  <text class="lbl" x="232" y="306">presigned PUT · multi-GB, bypasses API</text>
+
+  <!-- API → stores -->
+  <path d="M900,264 V318 H605 V366" stroke="#f87171" stroke-width="2.2" fill="none" marker-end="url(#a-red)"/>
+  <text class="lbl" x="752" y="312" text-anchor="middle">enqueue job</text>
+  <path d="M995,264 V366" stroke="#4ade80" stroke-width="2.2" fill="none" marker-end="url(#a-green)"/>
+  <text class="lbl" x="1005" y="330">metadata · records</text>
+  <path d="M1385,264 V366" stroke="#4ade80" stroke-width="2.2" fill="none" marker-end="url(#a-green)"/>
+  <text class="lbl" x="1395" y="330">full-text search</text>
+
+  <!-- stores → worker -->
+  <path d="M605,482 V540 H310 V670" stroke="#f87171" stroke-width="2.2" fill="none" marker-end="url(#a-red)"/>
+  <text class="lbl" x="432" y="534" text-anchor="middle">BLPOP</text>
+  <path d="M190,488 V670" stroke="#fbbf24" stroke-width="2.2" fill="none" marker-start="url(#a-amber)" marker-end="url(#a-amber)"/>
+  <text class="lbl" x="178" y="540" text-anchor="end">fetch · store</text><text class="lbl" x="178" y="558" text-anchor="end">children</text>
+  <path d="M1330,676 V560 H995 V488" stroke="#c084fc" stroke-width="2.2" fill="none" marker-end="url(#a-violet)"/>
+  <text class="lbl" x="1160" y="554" text-anchor="middle">batched INSERT · events · audit</text>
+  <path d="M1480,676 V488" stroke="#c084fc" stroke-width="2.2" fill="none" marker-end="url(#a-violet)"/>
+  <text class="lbl" x="1470" y="600" text-anchor="end">bulk index</text>
+
+  <!-- footer -->
+  <text x="40" y="950" fill="#64748b" font-size="14">Safety: zip-bomb expansion-ratio guard · path-traversal checks · encrypted archives park in PASSWORD_REQUIRED · stealer passwords stored only as SHA-256</text>
+  <text x="40" y="974" fill="#475569" font-size="13">Everything runs locally with one command: docker compose (9 services) via make up</text>
+</svg>
