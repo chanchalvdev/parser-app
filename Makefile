@@ -1,4 +1,4 @@
-.PHONY: up down logs ps clean restart migrate seed test test-api test-worker test-web test-all lint fmt search-init harness harness-full e2e-upload
+.PHONY: up down logs ps clean restart migrate seed test test-api test-worker test-web test-all lint fmt search-init e2e-upload
 
 DC_CMD := $(shell \
 	if docker compose version >/dev/null 2>&1; then \
@@ -38,17 +38,6 @@ seed:
 
 test:
 	./infra/scripts/test.sh
-
-# Harness-driven workflow
-HARNESS_SCOPE ?= implementation
-HARNESS_AGENT ?= architect
-HARNESS_MODE ?= light
-
-harness:
-	bash harness/scripts/pipeline.sh --scope "$(HARNESS_SCOPE)" --agent "$(HARNESS_AGENT)" --mode "$(HARNESS_MODE)"
-
-harness-full:
-	bash harness/scripts/pipeline.sh --scope "$(HARNESS_SCOPE)" --agent "$(HARNESS_AGENT)" --mode full
 
 test-api:
 	cd apps/api && go test ./...
