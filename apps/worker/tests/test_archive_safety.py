@@ -106,3 +106,21 @@ def test_zip_extractor_extracts_safe_members(tmp_path):
     assert len(extracted) == 1
     assert extracted[0].relative_path == "dir/hello.txt"
     assert (destination / "dir" / "hello.txt").read_text() == "hello world"
+
+
+def test_sevenz_extracts_every_member_of_multi_file_archive(tmp_path):
+    py7zr = pytest.importorskip("py7zr")
+    from app.extractors.sevenz_extractor import SevenZipExtractor
+
+    archive_path = tmp_path / "multi.7z"
+    with py7zr.SevenZipFile(archive_path, "w") as archive:
+        archive.writestr(b"alpha\n" * 50, "a.txt")
+        archive.writestr(b"bravo\n" * 50, "nested/b.txt")
+        archive.writestr(b"charlie\n" * 50, "c.log")
+
+    out_dir = tmp_path / "out"
+    extracted = SevenZipExtractor().extract(str(archive_path), str(out_dir))
+
+    assert sorted(f.relative_path for f in extracted) == ["a.txt", "c.log", "nested/b.txt"]
+    assert (out_dir / "nested" / "b.txt").read_bytes() == b"bravo\n" * 50
+
