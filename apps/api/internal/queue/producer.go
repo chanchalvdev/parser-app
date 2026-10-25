@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -50,5 +53,24 @@ func (p *RedisProducer) EnqueueIngestionJob(ctx context.Context, message Ingesti
 	if err != nil {
 		return fmt.Errorf("marshal ingestion job message: %w", err)
 	}
-	return p.client.RPush(ctx, p.queueName, payload).Err()
+	if err := p.client.RPush(ctx, p.queueName, payload).Err(); err != nil {
+		return err
+	}
+	wakeWorker()
+	return nil
+}
+
+// wakeWorker pings WORKER_WAKE_URL (if set) so a sleeping free-tier worker starts up and drains
+// the queue. Best effort: the job is already queued, so failures are ignored.
+func wakeWorker() {
+	url := os.Getenv("WORKER_WAKE_URL")
+	if url == "" {
+		return
+	}
+	go func() {
+		client := &http.Client{Timeout: 90 * time.Second}
+		if resp, err := client.Get(url); err == nil {
+			resp.Body.Close()
+		}
+	}()
 }

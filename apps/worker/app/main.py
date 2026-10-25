@@ -10,6 +10,7 @@ from app.extractors import PasswordRequiredError, WrongPasswordError
 from app.config import load_config
 from app.db.connection import DatabaseConnection
 from app.db.repositories import WorkerRepository
+from app.health import start_health_server
 from app.logging_config import setup_logging
 from app.processing.orchestrator import IngestionOrchestrator
 from app.secrets import LocalArchivePasswordSecretProvider
@@ -59,6 +60,9 @@ def main() -> None:
     config = load_config()
     setup_logging(config.log_level)
     logger = logging.getLogger("worker")
+
+    if os.getenv("PORT"):
+        start_health_server(int(os.environ["PORT"]))
 
     if config.temp_directory:
         os.makedirs(config.temp_directory, exist_ok=True)

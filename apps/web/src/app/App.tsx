@@ -118,12 +118,21 @@ const submitPassword = (fileId: string, password: string) =>
     { method: 'POST', body: JSON.stringify({ password }) },
   )
 
+// Hosted deployments cap uploads (VITE_MAX_UPLOAD_MB=10); larger files must be
+// processed on a local stack. Unset/0 means no client-side cap.
+const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB || 0)
+
 // Upload uses initiate -> PUT to presigned URL -> complete.
 async function uploadFile(
   file: File,
   passwordProvided: boolean,
   onProgress: (pct: number) => void,
 ): Promise<{ file_id: string; job_id: string }> {
+  if (MAX_UPLOAD_MB > 0 && file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+    throw new Error(
+      `File is larger than ${MAX_UPLOAD_MB} MB. Run the platform locally (docker compose) to process large files; they never leave your disk.`,
+    )
+  }
   const init = await apiJSON<{
     upload_id: string
     upload_url: string

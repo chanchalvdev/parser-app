@@ -223,6 +223,14 @@ make fmt                               # gofmt + web build
 ```
 </details>
 
+## Hosted deployment and large files
+
+A hosted instance (see `docker-compose.prod.yml`, `infra/docker/Caddyfile`) accepts uploads up to
+**10 MB**. This is enforced in three places: the UI (`VITE_MAX_UPLOAD_MB`), the API
+(`max_upload_size_mb`, set by `infra/scripts/set-hosted-limits.sh`) and the storage proxy
+(`infra/docker/minio-proxy.prod.conf`). Larger files, up to multiple GB, are processed on your own
+machine with the normal local stack (`make up`), so they never reach the hosted database or storage.
+
 ## Supported formats and limits
 
 **Archives:** `.zip` (ZipCrypto and AES) · `.rar` (RAR4/RAR5) · `.tar` · `.tar.gz` / `.tgz` · `.7z`. All can be nested and password-protected.
