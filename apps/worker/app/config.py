@@ -50,12 +50,18 @@ class WorkerConfig:
     redis_db: int
     queue_name: str
     redis_block_timeout: int
+    redis_tls: bool
 
     minio_endpoint: str
     minio_access_key: str
     minio_secret_key: str
     minio_bucket: str
     minio_use_ssl: bool
+
+    storage_backend: str
+    azure_storage_account: str
+    azure_storage_key: str
+    azure_storage_endpoint: str
 
     log_level: str
     poll_interval_seconds: int
@@ -83,6 +89,7 @@ def load_config() -> WorkerConfig:
         redis_db=_env_int("REDIS_DB", 0),
         queue_name=_env("WORKER_QUEUE_NAME", _env("QUEUE_NAME", "ingestion_jobs")),
         redis_block_timeout=_env_int("WORKER_REDIS_BLOCK_TIMEOUT", 5),
+        redis_tls=_env_bool("REDIS_TLS", False),
         max_archive_depth=_env_int("WORKER_MAX_ARCHIVE_DEPTH", 10),
         max_extracted_files=_env_int("WORKER_MAX_EXTRACTED_FILES", 50000),
         max_extracted_size_mb=_env_int("WORKER_MAX_EXTRACTED_SIZE_MB", 1024),
@@ -92,6 +99,10 @@ def load_config() -> WorkerConfig:
         minio_secret_key=_env("MINIO_SECRET_KEY", "minioadmin"),
         minio_bucket=_env("MINIO_BUCKET", "file-ingestion"),
         minio_use_ssl=_env_bool("MINIO_USE_SSL", False),
+        storage_backend=_env("STORAGE_BACKEND", "minio"),
+        azure_storage_account=_env("AZURE_STORAGE_ACCOUNT", ""),
+        azure_storage_key=_env("AZURE_STORAGE_KEY", ""),
+        azure_storage_endpoint=_env("AZURE_STORAGE_ENDPOINT", ""),
         log_level=_env("WORKER_LOG_LEVEL", "INFO").upper(),
         poll_interval_seconds=_env_int("WORKER_POLL_INTERVAL_SECONDS", 1),
         temp_directory=_env("WORKER_TEMP_DIR", "/tmp/file-worker"),

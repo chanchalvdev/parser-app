@@ -57,3 +57,7 @@ def setup_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(JsonLogFormatter())
     logger.addHandler(handler)
+
+    # The Azure SDK logs every HTTP request/response at INFO. That drowns job logs and,
+    # on Azure, inflates Log Analytics ingestion cost. Keep only its warnings and errors.
+    logging.getLogger("azure").setLevel(logging.WARNING)
