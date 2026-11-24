@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -66,6 +67,10 @@ func main() {
 		Addr:     cfg.RedisAddr,
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
+	}
+	if cfg.RedisTLS {
+		// Azure Cache for Redis only serves TLS (port 6380). ServerName comes from Addr.
+		redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
 	redisClient := redis.NewClient(redisOptions)
 	defer redisClient.Close()

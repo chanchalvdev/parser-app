@@ -74,6 +74,8 @@ def main() -> None:
         password=config.redis_password or None,
         db=config.redis_db,
         decode_responses=False,
+        # Azure Cache for Redis only serves TLS on 6380; certificates are verified.
+        ssl=config.redis_tls,
     )
     redis_client.ping()
 

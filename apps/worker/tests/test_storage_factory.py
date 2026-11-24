@@ -14,8 +14,10 @@ AZURITE_KEY = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1
 
 def test_default_backend_is_minio(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("STORAGE_BACKEND", raising=False)
+    monkeypatch.delenv("REDIS_TLS", raising=False)
     config = load_config()
     assert config.storage_backend == "minio"
+    assert config.redis_tls is False
     assert isinstance(build_storage(config), MinioClient)
 
 
@@ -24,7 +26,9 @@ def test_azure_backend_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AZURE_STORAGE_ACCOUNT", "stparsertest")
     monkeypatch.setenv("AZURE_STORAGE_KEY", AZURITE_KEY)
     monkeypatch.setenv("MINIO_BUCKET", "file-ingestion")
+    monkeypatch.setenv("REDIS_TLS", "true")
     config = load_config()
+    assert config.redis_tls is True
     storage = build_storage(config)
     assert isinstance(storage, AzureBlobClient)
     assert storage.bucket == "file-ingestion"

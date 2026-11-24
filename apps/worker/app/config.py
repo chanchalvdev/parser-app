@@ -50,6 +50,7 @@ class WorkerConfig:
     redis_db: int
     queue_name: str
     redis_block_timeout: int
+    redis_tls: bool
 
     minio_endpoint: str
     minio_access_key: str
@@ -88,6 +89,7 @@ def load_config() -> WorkerConfig:
         redis_db=_env_int("REDIS_DB", 0),
         queue_name=_env("WORKER_QUEUE_NAME", _env("QUEUE_NAME", "ingestion_jobs")),
         redis_block_timeout=_env_int("WORKER_REDIS_BLOCK_TIMEOUT", 5),
+        redis_tls=_env_bool("REDIS_TLS", False),
         max_archive_depth=_env_int("WORKER_MAX_ARCHIVE_DEPTH", 10),
         max_extracted_files=_env_int("WORKER_MAX_EXTRACTED_FILES", 50000),
         max_extracted_size_mb=_env_int("WORKER_MAX_EXTRACTED_SIZE_MB", 1024),

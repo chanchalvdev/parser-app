@@ -17,6 +17,7 @@ type Config struct {
 	RedisPassword  string
 	RedisDB        int
 	RedisQueueName string
+	RedisTLS       bool
 	StorageBackend string
 	AzureStorageAccount        string
 	AzureStorageKey            string
@@ -46,6 +47,7 @@ func Load() (*Config, error) {
 		RedisPassword:  getenv("REDIS_PASSWORD", ""),
 		RedisDB:        getenvInt("REDIS_DB", 0),
 		RedisQueueName: getenv("QUEUE_NAME", "ingestion_jobs"),
+		RedisTLS:       getenvBool("REDIS_TLS", false),
 		StorageBackend: getenv("STORAGE_BACKEND", "minio"),
 		AzureStorageAccount:        getenv("AZURE_STORAGE_ACCOUNT", ""),
 		AzureStorageKey:            getenv("AZURE_STORAGE_KEY", ""),
