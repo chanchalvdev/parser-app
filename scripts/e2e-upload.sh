@@ -84,8 +84,14 @@ fi
 
 log "Upload initiated: ${upload_id}"
 
+# Storage-specific headers the API says the PUT needs (Azure Blob: x-ms-blob-type: BlockBlob).
+upload_header_args=()
+while IFS= read -r header_line; do
+  [ -n "${header_line}" ] && upload_header_args+=(-H "${header_line}")
+done < <(echo "${init_resp}" | jq -r '(.upload_headers // {}) | to_entries[] | "\(.key): \(.value)"')
+
 log "Uploading dummy file to presigned URL"
-if ! curl -sS -X PUT -T "${DUMMY_FILE_PATH}" "${upload_url}" >/tmp/e2e-upload-put.log; then
+if ! curl -fsS -X PUT ${upload_header_args[@]+"${upload_header_args[@]}"} -T "${DUMMY_FILE_PATH}" "${upload_url}" >/tmp/e2e-upload-put.log; then
   echo "[e2e] upload to object storage failed"
   cat /tmp/e2e-upload-put.log
   exit 1

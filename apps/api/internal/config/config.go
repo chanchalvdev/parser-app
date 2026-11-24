@@ -17,6 +17,11 @@ type Config struct {
 	RedisPassword  string
 	RedisDB        int
 	RedisQueueName string
+	StorageBackend string
+	AzureStorageAccount        string
+	AzureStorageKey            string
+	AzureStorageEndpoint       string
+	AzureStoragePublicEndpoint string
 	MinioEndpoint string
 	MinioPresignEndpoint string
 	MinioAccessKey string
@@ -41,6 +46,11 @@ func Load() (*Config, error) {
 		RedisPassword:  getenv("REDIS_PASSWORD", ""),
 		RedisDB:        getenvInt("REDIS_DB", 0),
 		RedisQueueName: getenv("QUEUE_NAME", "ingestion_jobs"),
+		StorageBackend: getenv("STORAGE_BACKEND", "minio"),
+		AzureStorageAccount:        getenv("AZURE_STORAGE_ACCOUNT", ""),
+		AzureStorageKey:            getenv("AZURE_STORAGE_KEY", ""),
+		AzureStorageEndpoint:       getenv("AZURE_STORAGE_ENDPOINT", ""),
+		AzureStoragePublicEndpoint: getenv("AZURE_STORAGE_PUBLIC_ENDPOINT", ""),
 		MinioEndpoint:         getenv("MINIO_ENDPOINT", "minio:9000"),
 		MinioPresignEndpoint:  getenv("MINIO_PRESIGN_ENDPOINT", getenv("MINIO_ENDPOINT", "minio:9000")),
 		MinioAccessKey: getenv("MINIO_ACCESS_KEY", "minioadmin"),

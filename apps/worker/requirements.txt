@@ -1,5 +1,6 @@
 redis==5.0.7
 minio==7.2.7
+azure-storage-blob==12.24.1
 psycopg2-binary==2.9.10
 opensearch-py==2.8.0
 py7zr==0.20.8

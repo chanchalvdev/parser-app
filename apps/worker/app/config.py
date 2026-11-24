@@ -57,6 +57,11 @@ class WorkerConfig:
     minio_bucket: str
     minio_use_ssl: bool
 
+    storage_backend: str
+    azure_storage_account: str
+    azure_storage_key: str
+    azure_storage_endpoint: str
+
     log_level: str
     poll_interval_seconds: int
     max_archive_depth: int
@@ -92,6 +97,10 @@ def load_config() -> WorkerConfig:
         minio_secret_key=_env("MINIO_SECRET_KEY", "minioadmin"),
         minio_bucket=_env("MINIO_BUCKET", "file-ingestion"),
         minio_use_ssl=_env_bool("MINIO_USE_SSL", False),
+        storage_backend=_env("STORAGE_BACKEND", "minio"),
+        azure_storage_account=_env("AZURE_STORAGE_ACCOUNT", ""),
+        azure_storage_key=_env("AZURE_STORAGE_KEY", ""),
+        azure_storage_endpoint=_env("AZURE_STORAGE_ENDPOINT", ""),
         log_level=_env("WORKER_LOG_LEVEL", "INFO").upper(),
         poll_interval_seconds=_env_int("WORKER_POLL_INTERVAL_SECONDS", 1),
         temp_directory=_env("WORKER_TEMP_DIR", "/tmp/file-worker"),

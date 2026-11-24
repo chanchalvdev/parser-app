@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,8 +19,7 @@ import (
 	"github.com/enterprise-file-platform/api/internal/search"
 	"github.com/enterprise-file-platform/api/internal/repositories"
 	"github.com/enterprise-file-platform/api/internal/services"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/enterprise-file-platform/api/internal/storage"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -45,24 +43,31 @@ func main() {
 	}
 	defer pool.Close()
 
-	minioClient, err := minio.New(
-		cleanMinioEndpoint(cfg.MinioEndpoint),
-		&minio.Options{
-			Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
-			Secure: strings.HasPrefix(cfg.MinioEndpoint, "https://"),
-		},
-	)
+	objectStore, err := storage.New(storage.Config{
+		Backend:              cfg.StorageBackend,
+		Bucket:               cfg.MinioBucket,
+		MinioEndpoint:        cfg.MinioEndpoint,
+		MinioPresignEndpoint: cfg.MinioPresignEndpoint,
+		MinioAccessKey:       cfg.MinioAccessKey,
+		MinioSecretKey:       cfg.MinioSecretKey,
+		AzureAccountName:     cfg.AzureStorageAccount,
+		AzureAccountKey:      cfg.AzureStorageKey,
+		AzureEndpoint:        cfg.AzureStorageEndpoint,
+		AzurePublicEndpoint:  cfg.AzureStoragePublicEndpoint,
+	})
 	if err != nil {
-		logger.Fatal("init minio client failed", zap.Error(err))
+		logger.Fatal("init object storage failed", zap.Error(err))
 	}
-	if err := ensureBucket(ctx, minioClient, cfg.MinioBucket); err != nil {
-		logger.Fatal("ensure minio bucket failed", zap.Error(err))
+	if err := objectStore.EnsureBucket(ctx); err != nil {
+		logger.Fatal("ensure storage bucket failed", zap.String("backend", objectStore.Backend()), zap.Error(err))
 	}
-	redisClient := redis.NewClient(&redis.Options{
+	logger.Info("object storage ready", zap.String("backend", objectStore.Backend()), zap.String("bucket", objectStore.Bucket()))
+	redisOptions := &redis.Options{
 		Addr:     cfg.RedisAddr,
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
-	})
+	}
+	redisClient := redis.NewClient(redisOptions)
 	defer redisClient.Close()
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		logger.Fatal("redis unavailable at startup", zap.Error(err))
@@ -88,10 +93,8 @@ func main() {
 		jobEventRepo,
 		settingsRepo,
 		auditLogRepo,
-		minioClient,
+		objectStore,
 		queueProducer,
-		cfg.MinioBucket,
-		cfg.MinioPresignEndpoint,
 	)
 	fileService := services.NewFileService(
 		fileRepo,
@@ -183,26 +186,6 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Fatal("shutdown failed", zap.Error(err))
 	}
-}
-
-func cleanMinioEndpoint(endpoint string) string {
-	cleaned := strings.TrimPrefix(endpoint, "http://")
-	cleaned = strings.TrimPrefix(cleaned, "https://")
-	return cleaned
-}
-
-func ensureBucket(ctx context.Context, minioClient *minio.Client, bucket string) error {
-	exists, err := minioClient.BucketExists(ctx, bucket)
-	if err != nil {
-		return fmt.Errorf("check bucket exists: %w", err)
-	}
-	if exists {
-		return nil
-	}
-	if err := minioClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
-		return fmt.Errorf("create bucket: %w", err)
-	}
-	return nil
 }
 
 func apiKeyIfAuthEnabled(cfg *config.Config) string {
