@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import dataclasses
+import signal
 
 import pytest
 
 from app.config import load_config
+from app.main import _ShutdownFlag
 from app.storage.azure_blob_client import AzureBlobClient
 from app.storage.factory import build_storage
 from app.storage.minio_client import MinioClient
@@ -55,3 +57,9 @@ def test_unknown_backend_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ValueError):
         build_storage(config)
 
+
+def test_shutdown_flag() -> None:
+    flag = _ShutdownFlag()
+    assert flag.requested is False
+    flag.request(signal.SIGTERM, None)
+    assert flag.requested is True
