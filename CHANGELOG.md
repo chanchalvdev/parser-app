@@ -9,6 +9,15 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Free-tier hosted deployment: Render blueprint with Neon, Cloudflare R2 and Aiven; optional VM
   deployment with Caddy; 10 MB hosted upload cap.
+- Azure support: pluggable object storage (`STORAGE_BACKEND=minio|azure`) with Azure Blob SAS
+  uploads, `upload_headers` in the upload-initiate response, and `REDIS_TLS` for TLS-only Redis.
+- `docker-compose.azurite.yml` to exercise the Azure Blob path locally against Azurite.
+- Manual Azure deployment guide, an OIDC-authenticated `Deploy to Azure` workflow, and a Static
+  Web Apps SPA fallback config.
+
+### Changed
+- The worker exits between jobs on SIGTERM instead of mid-job, so scale-to-zero cannot strand jobs.
+- The Azure SDK's per-request INFO logging is suppressed.
 
 ### Security
 - `API_KEY` is now enforced on `/api/v1/*` (constant-time compare) when `AUTH_ENABLED=true`; it was
