@@ -81,10 +81,18 @@ interface FileInfo {
 
 // ---------------------------------------------------------------- api
 
+// Hosted builds bake in VITE_API_KEY. It is visible in the bundle, so it only keeps out
+// casual scanners; network restrictions on the API are the real access control.
+const API_KEY: string = import.meta.env.VITE_API_KEY || ''
+
 async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+      ...((init?.headers as Record<string, string>) || {}),
+    },
   })
   if (!res.ok) {
     let detail = res.statusText
