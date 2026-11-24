@@ -1,0 +1,18 @@
+# APP_HOST / S3_HOST come from .env (e.g. myapp.duckdns.org / s3-myapp.duckdns.org).
+{$APP_HOST} {
+    encode gzip
+    handle /api/* {
+        reverse_proxy api:8080
+    }
+    handle /health {
+        reverse_proxy api:8080
+    }
+    handle {
+        reverse_proxy web:80
+    }
+}
+
+# Browser uploads (presigned PUT) go straight here; nginx behind it caps bodies at 11 MB.
+{$S3_HOST} {
+    reverse_proxy minio-proxy:9000
+}

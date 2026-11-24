@@ -11,6 +11,7 @@ type Config struct {
 	AppEnv         string
 	APIPort        int
 	AuthEnabled    bool
+	APIKey         string
 	DatabaseURL    string
 	RedisAddr      string
 	RedisPassword  string
@@ -34,6 +35,7 @@ func Load() (*Config, error) {
 		AppEnv:         getenv("APP_ENV", "local"),
 		APIPort:        getenvInt("API_PORT", 8080),
 		AuthEnabled:    getenvBool("AUTH_ENABLED", false),
+		APIKey:         getenv("API_KEY", ""),
 		DatabaseURL:    getenv("DATABASE_URL", "postgres://file_user:file_password@postgres:5432/file_platform?sslmode=disable"),
 		RedisAddr:      getenv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:  getenv("REDIS_PASSWORD", ""),
@@ -53,6 +55,10 @@ func Load() (*Config, error) {
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+	// Fail closed: a hosted deployment with auth on but no key would otherwise be wide open.
+	if cfg.AuthEnabled && strings.TrimSpace(cfg.APIKey) == "" {
+		return nil, fmt.Errorf("API_KEY is required when AUTH_ENABLED=true")
 	}
 	return cfg, nil
 }

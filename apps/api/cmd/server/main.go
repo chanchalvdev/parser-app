@@ -152,6 +152,8 @@ func main() {
 			return middleware.Recovery(logger)(next)
 		},
 		middleware.Logger(logger),
+		// With AUTH_ENABLED=true every /api/v1 call needs X-API-Key (Render/Azure).
+		middleware.RequireAPIKey(apiKeyIfAuthEnabled(cfg)),
 	)
 
 	address := fmt.Sprintf(":%d", cfg.APIPort)
@@ -201,4 +203,11 @@ func ensureBucket(ctx context.Context, minioClient *minio.Client, bucket string)
 		return fmt.Errorf("create bucket: %w", err)
 	}
 	return nil
+}
+
+func apiKeyIfAuthEnabled(cfg *config.Config) string {
+	if !cfg.AuthEnabled {
+		return ""
+	}
+	return cfg.APIKey
 }

@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Free-tier hosted deployment: Render blueprint with Neon, Cloudflare R2 and Aiven; optional VM
+  deployment with Caddy; 10 MB hosted upload cap.
+
+### Security
+- `API_KEY` is now enforced on `/api/v1/*` (constant-time compare) when `AUTH_ENABLED=true`; it was
+  previously ignored, leaving hosted APIs, including admin settings via a spoofed `X-User-Roles`
+  header, open. Startup fails if auth is enabled without a key. The UI sends `VITE_API_KEY`.
+
 ## [1.0.0] - 2026-10-24
 
 First tagged release.

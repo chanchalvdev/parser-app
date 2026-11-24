@@ -81,10 +81,18 @@ interface FileInfo {
 
 // ---------------------------------------------------------------- api
 
+// Hosted builds bake in VITE_API_KEY. It is visible in the bundle, so it only keeps out
+// casual scanners; network restrictions on the API are the real access control.
+const API_KEY: string = import.meta.env.VITE_API_KEY || ''
+
 async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+      ...((init?.headers as Record<string, string>) || {}),
+    },
   })
   if (!res.ok) {
     let detail = res.statusText
@@ -118,12 +126,21 @@ const submitPassword = (fileId: string, password: string) =>
     { method: 'POST', body: JSON.stringify({ password }) },
   )
 
+// Hosted deployments cap uploads (VITE_MAX_UPLOAD_MB=10); larger files must be
+// processed on a local stack. Unset/0 means no client-side cap.
+const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB || 0)
+
 // Upload uses initiate -> PUT to presigned URL -> complete.
 async function uploadFile(
   file: File,
   passwordProvided: boolean,
   onProgress: (pct: number) => void,
 ): Promise<{ file_id: string; job_id: string }> {
+  if (MAX_UPLOAD_MB > 0 && file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+    throw new Error(
+      `File is larger than ${MAX_UPLOAD_MB} MB. Run the platform locally (docker compose) to process large files; they never leave your disk.`,
+    )
+  }
   const init = await apiJSON<{
     upload_id: string
     upload_url: string

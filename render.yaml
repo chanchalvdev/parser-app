@@ -1,0 +1,79 @@
+# Render Blueprint (free plan). External free services fill the gaps Render's free tier leaves:
+#   Postgres -> Neon (Render's free DB expires after 30 days)
+#   Object storage -> Cloudflare R2 (S3-compatible, 10 GB free)
+#   Search -> Aiven free OpenSearch
+# Fill every `sync: false` value in the Render dashboard on first deploy.
+# Uploads are capped at 10 MB here; larger files are processed on a local stack.
+services:
+  - type: web
+    name: parser-api
+    runtime: docker
+    plan: free
+    dockerContext: ./apps/api
+    dockerfilePath: ./apps/api/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - { key: API_PORT, value: "10000" }
+      - { key: APP_ENV, value: production }
+      - { key: AUTH_ENABLED, value: "true" }
+      - { key: API_KEY, generateValue: true }
+      - { key: QUEUE_NAME, value: ingestion_jobs }
+      - { key: MINIO_BUCKET, value: file-ingestion }
+      - { key: MAX_UPLOAD_SIZE_MB, value: "10" }
+      - { key: DATABASE_URL, sync: false }          # Neon connection string (sslmode=require)
+      - key: REDIS_ADDR
+        fromService: { type: keyvalue, name: parser-redis, property: hostport }
+      - { key: MINIO_ENDPOINT, sync: false }         # https://<account>.r2.cloudflarestorage.com
+      - { key: MINIO_PRESIGN_ENDPOINT, sync: false } # same value as MINIO_ENDPOINT
+      - { key: MINIO_ACCESS_KEY, sync: false }
+      - { key: MINIO_SECRET_KEY, sync: false }
+      - { key: OPENSEARCH_URL, sync: false }         # https://<aiven-host>:<port>
+      - { key: OPENSEARCH_USER, sync: false }
+      - { key: OPENSEARCH_PASSWORD, sync: false }
+      - { key: ALLOWED_ORIGINS, sync: false }        # the parser-web URL
+      - { key: WORKER_WAKE_URL, sync: false }        # the parser-worker URL
+
+  - type: web
+    name: parser-worker
+    runtime: docker
+    plan: free
+    dockerContext: ./apps/worker
+    dockerfilePath: ./apps/worker/Dockerfile
+    healthCheckPath: /
+    envVars:
+      - { key: APP_ENV, value: production }
+      - { key: QUEUE_NAME, value: ingestion_jobs }
+      - { key: WORKER_QUEUE_NAME, value: ingestion_jobs }
+      - { key: MINIO_BUCKET, value: file-ingestion }
+      - { key: MINIO_USE_SSL, value: "true" }
+      - { key: WORKER_MAX_EXTRACTED_SIZE_MB, value: "200" }
+      - { key: WORKER_MAX_EXTRACTED_FILES, value: "5000" }
+      - { key: WORKER_MAX_ARCHIVE_DEPTH, value: "5" }
+      - { key: DATABASE_URL, sync: false }
+      - key: REDIS_ADDR
+        fromService: { type: keyvalue, name: parser-redis, property: hostport }
+      - { key: MINIO_ENDPOINT, sync: false }         # host only, no scheme
+      - { key: MINIO_ACCESS_KEY, sync: false }
+      - { key: MINIO_SECRET_KEY, sync: false }
+      - { key: OPENSEARCH_URL, sync: false }
+      - { key: OPENSEARCH_USER, sync: false }
+      - { key: OPENSEARCH_PASSWORD, sync: false }
+
+  - type: web
+    name: parser-web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - { type: rewrite, source: /*, destination: /index.html }
+    envVars:
+      - { key: VITE_MAX_UPLOAD_MB, value: "10" }
+      - { key: VITE_API_BASE_URL, sync: false }      # https://<parser-api>.onrender.com/api/v1
+      - { key: VITE_API_KEY, sync: false }           # copy parser-api's generated API_KEY (AUTH_ENABLED enforces it)
+
+  - type: keyvalue
+    name: parser-redis
+    plan: free
+    ipAllowList: []                                  # internal connections only
+    maxmemoryPolicy: noeviction
