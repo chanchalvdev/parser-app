@@ -231,6 +231,12 @@ A hosted instance (see `docker-compose.prod.yml`, `infra/docker/Caddyfile`) acce
 (`infra/docker/minio-proxy.prod.conf`). Larger files, up to multiple GB, are processed on your own
 machine with the normal local stack (`make up`), so they never reach the hosted database or storage.
 
+**Azure:** a step-by-step manual deployment (Container Apps, Static Web Apps, PostgreSQL Flexible
+Server, Azure Cache for Redis, Blob Storage, Key Vault, an OpenSearch VM) with the reasoning and
+trade-offs for each service is in [`docs/deploy/azure-manual-deployment.md`](docs/deploy/azure-manual-deployment.md).
+Set `STORAGE_BACKEND=azure` and `REDIS_TLS=true` to run against Azure services; rehearse the Blob
+code path locally with `docker compose -f docker-compose.yml -f docker-compose.azurite.yml up -d`.
+
 ## Supported formats and limits
 
 **Archives:** `.zip` (ZipCrypto and AES) · `.rar` (RAR4/RAR5) · `.tar` · `.tar.gz` / `.tgz` · `.7z`. All can be nested and password-protected.

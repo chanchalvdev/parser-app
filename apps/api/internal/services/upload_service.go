@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -16,7 +15,7 @@ import (
 	"github.com/enterprise-file-platform/api/internal/http/middleware"
 	"github.com/enterprise-file-platform/api/internal/queue"
 	"github.com/google/uuid"
-	"github.com/minio/minio-go/v7"
+	"github.com/enterprise-file-platform/api/internal/storage"
 )
 
 const (
@@ -40,10 +39,8 @@ type UploadService struct {
 	jobEventRepo     repositories.JobEventRepository
 	settingsRepo     repositories.SettingsRepository
 	auditLogRepo     repositories.AuditLogRepository
-	minioClient      *minio.Client
+	objectStore      storage.ObjectStore
 	queueProducer    queue.Producer
-	minioBucket      string
-	minioPublicURL   string
 }
 
 type UploadInitiateRequest struct {
@@ -57,6 +54,8 @@ type UploadInitiateResponse struct {
 	UploadID          string `json:"upload_id"`
 	ObjectKey         string `json:"object_key"`
 	UploadURL         string `json:"upload_url"`
+	// Headers the client must send with the PUT to upload_url (Azure needs x-ms-blob-type).
+	UploadHeaders     map[string]string `json:"upload_headers"`
 	ExpiresInSeconds  int64  `json:"expires_in_seconds"`
 }
 
@@ -85,10 +84,8 @@ func NewUploadService(
 	jobEventRepo repositories.JobEventRepository,
 	settingsRepo repositories.SettingsRepository,
 	auditLogRepo repositories.AuditLogRepository,
-	minioClient *minio.Client,
+	objectStore storage.ObjectStore,
 	queueProducer queue.Producer,
-	minioBucket string,
-	minioPublicURL string,
 ) *UploadService {
 	return &UploadService{
 		uploadRepo:   uploadRepo,
@@ -97,16 +94,14 @@ func NewUploadService(
 		jobEventRepo: jobEventRepo,
 		settingsRepo: settingsRepo,
 		auditLogRepo: auditLogRepo,
-		minioClient:  minioClient,
+		objectStore:   objectStore,
 		queueProducer: queueProducer,
-		minioBucket:  minioBucket,
-		minioPublicURL: minioPublicURL,
 	}
 }
 
 func (s *UploadService) InitiateUpload(ctx context.Context, req UploadInitiateRequest) (*UploadInitiateResponse, error) {
-	if s.minioClient == nil {
-		return nil, fmt.Errorf("upload service is not initialized: minio client")
+	if s.objectStore == nil {
+		return nil, fmt.Errorf("upload service is not initialized: object store")
 	}
 	if s.settingsRepo == nil || s.uploadRepo == nil || s.auditLogRepo == nil {
 		return nil, fmt.Errorf("upload service is not initialized")
@@ -169,25 +164,9 @@ func (s *UploadService) InitiateUpload(ctx context.Context, req UploadInitiateRe
 	}
 
 	objectKey := storageObjectKey(*createdUpload.StoragePrefix, normalizedFileName)
-	presignedURL, err := s.minioClient.PresignedPutObject(
-		ctx,
-		s.minioBucket,
-		objectKey,
-		uploadURLExpirationD,
-	)
+	presigned, err := s.objectStore.PresignPut(ctx, objectKey, uploadURLExpirationD)
 	if err != nil {
-		return nil, fmt.Errorf("create presigned upload url: %w", err)
-	}
-	if s.minioPublicURL != "" {
-		publicURL, rewriteErr := rewritePresignedURL(presignedURL.String(), s.minioPublicURL)
-		if rewriteErr != nil {
-			return nil, fmt.Errorf("rewrite presigned upload url: %w", rewriteErr)
-		}
-		parsedURL, parseErr := url.Parse(publicURL)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse rewritten upload url: %w", parseErr)
-		}
-		presignedURL = parsedURL
+		return nil, err
 	}
 
 	if err := s.createUploadAuditLog(
@@ -209,14 +188,15 @@ func (s *UploadService) InitiateUpload(ctx context.Context, req UploadInitiateRe
 	return &UploadInitiateResponse{
 		UploadID:          createdUpload.ID,
 		ObjectKey:         objectKey,
-		UploadURL:         presignedURL.String(),
+		UploadURL:         presigned.URL,
+		UploadHeaders:     presigned.Headers,
 		ExpiresInSeconds: int64(uploadURLExpiration),
 	}, nil
 }
 
 func (s *UploadService) CompleteUpload(ctx context.Context, req UploadCompleteRequest) (*UploadCompleteResponse, error) {
-	if s.minioClient == nil {
-		return nil, fmt.Errorf("upload service is not initialized: minio client")
+	if s.objectStore == nil {
+		return nil, fmt.Errorf("upload service is not initialized: object store")
 	}
 	if s.queueProducer == nil || s.uploadRepo == nil || s.fileRepo == nil || s.jobRepo == nil || s.jobEventRepo == nil || s.auditLogRepo == nil {
 		return nil, fmt.Errorf("upload service is not initialized")
@@ -257,7 +237,7 @@ func (s *UploadService) CompleteUpload(ctx context.Context, req UploadCompleteRe
 	}
 
 	objectKey := storageObjectKey(*upload.StoragePrefix, meta.FileName)
-	existingObj, err := s.minioClient.StatObject(ctx, s.minioBucket, objectKey, minio.StatObjectOptions{})
+	existingObj, err := s.objectStore.Stat(ctx, objectKey)
 	if err != nil {
 		return nil, fmt.Errorf("%w: object not found in object storage: %s", ErrInvalidUploadRequest, err)
 	}
@@ -317,7 +297,7 @@ func (s *UploadService) CompleteUpload(ctx context.Context, req UploadCompleteRe
 		TenantID:    createdJob.TenantID,
 		RootFileID:  createdFile.ID,
 		StoragePath: createdFile.StoragePath,
-		Bucket:      s.minioBucket,
+		Bucket:      s.objectStore.Bucket(),
 		OriginalName: createdFile.OriginalName,
 		Depth:       createdFile.Depth,
 		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
@@ -644,42 +624,6 @@ func isArchive(fileName, contentType string) bool {
 
 func ptrString(value string) *string {
 	return &value
-}
-
-func rewritePresignedURL(rawURLValue, publicEndpoint string) (string, error) {
-	rawURLValue = strings.TrimSpace(rawURLValue)
-	publicEndpoint = strings.TrimSpace(publicEndpoint)
-	if rawURLValue == "" {
-		return "", errors.New("raw presigned url is required")
-	}
-	if publicEndpoint == "" {
-		return rawURLValue, nil
-	}
-
-	publicEndpointURL, err := url.Parse(publicEndpoint)
-	if err != nil {
-		if !strings.Contains(publicEndpoint, "://") {
-			publicEndpointURL, err = url.Parse("http://" + publicEndpoint)
-			if err != nil {
-				return "", err
-			}
-		} else {
-			return "", err
-		}
-	}
-
-	originalURL, err := url.Parse(rawURLValue)
-	if err != nil {
-		return "", err
-	}
-
-	originalURL.Scheme = publicEndpointURL.Scheme
-	originalURL.Host = publicEndpointURL.Host
-	if publicEndpointURL.Path != "" && publicEndpointURL.Path != "/" {
-		originalURL.Path = strings.TrimSuffix(publicEndpointURL.Path, "/") + "/" + strings.TrimPrefix(originalURL.Path, "/")
-	}
-
-	return originalURL.String(), nil
 }
 
 func ptrFromStringValue(value string) *string {

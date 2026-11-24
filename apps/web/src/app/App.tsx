@@ -144,6 +144,8 @@ async function uploadFile(
   const init = await apiJSON<{
     upload_id: string
     upload_url: string
+    // Extra headers the storage backend requires on the PUT (Azure: x-ms-blob-type).
+    upload_headers?: Record<string, string>
   }>(`/uploads/initiate`, {
     method: 'POST',
     body: JSON.stringify({
@@ -154,7 +156,7 @@ async function uploadFile(
     }),
   })
 
-  await putWithProgress(init.upload_url, file, onProgress)
+  await putWithProgress(init.upload_url, file, onProgress, init.upload_headers)
 
   const complete = await apiJSON<{ file_id: string; job_id: string }>(
     `/uploads/complete`,
@@ -167,10 +169,12 @@ function putWithProgress(
   url: string,
   file: File,
   onProgress: (pct: number) => void,
+  headers: Record<string, string> = {},
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value)
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
     }

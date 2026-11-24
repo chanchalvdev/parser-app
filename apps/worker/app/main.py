@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-import time
 import os
+import signal
+import time
 
 import redis
 
@@ -15,7 +16,7 @@ from app.logging_config import setup_logging
 from app.processing.orchestrator import IngestionOrchestrator
 from app.secrets import LocalArchivePasswordSecretProvider
 from app.queue.redis_consumer import IngestionJobMessage, RedisIngestionQueueConsumer
-from app.storage.minio_client import MinioClient
+from app.storage.factory import build_storage
 
 
 def _split_redis_addr(addr: str) -> tuple[str, int]:
@@ -25,6 +26,24 @@ def _split_redis_addr(addr: str) -> tuple[str, int]:
         host, port_text = addr.rsplit(":", 1)
         port = int(port_text)
     return host, port
+
+
+class _ShutdownFlag:
+    """Set by SIGTERM/SIGINT. The loop finishes the job in hand, then exits.
+
+    Container Apps (and Kubernetes) send SIGTERM when scaling a replica in, then wait
+    terminationGracePeriodSeconds before SIGKILL. Exiting between jobs instead of mid-job
+    means a scale-to-zero never strands a job in `running`.
+    """
+
+    def __init__(self) -> None:
+        self.requested = False
+
+    def request(self, signum: int, _frame: object) -> None:
+        self.requested = True
+        logging.getLogger("worker").info(
+            "shutdown requested; finishing current job before exit", extra={"signal": signum}
+        )
 
 
 def _error_payload(message: IngestionJobMessage | None, repository: WorkerRepository, logger: logging.Logger, err: Exception) -> None:
@@ -74,17 +93,14 @@ def main() -> None:
         password=config.redis_password or None,
         db=config.redis_db,
         decode_responses=False,
+        # Azure Cache for Redis only serves TLS on 6380; certificates are verified.
+        ssl=config.redis_tls,
     )
     redis_client.ping()
 
     repository = WorkerRepository(DatabaseConnection(config.database_url))
-    minio_client = MinioClient(
-        endpoint=config.minio_endpoint,
-        access_key=config.minio_access_key,
-        secret_key=config.minio_secret_key,
-        bucket=config.minio_bucket,
-        secure=config.minio_use_ssl,
-    )
+    storage = build_storage(config)
+    storage.ensure_bucket()
     queue_consumer = RedisIngestionQueueConsumer(
         redis_client=redis_client,
         queue_name=config.queue_name,
@@ -92,7 +108,7 @@ def main() -> None:
     )
     orchestrator = IngestionOrchestrator(
         repository=repository,
-        storage=minio_client,
+        storage=storage,
         logger=logger,
         temp_directory=config.temp_directory,
         password_secret_provider=LocalArchivePasswordSecretProvider(repository=repository),
@@ -107,9 +123,16 @@ def main() -> None:
         opensearch_files_index=config.opensearch_files_index,
     )
 
-    logger.info("worker loop started", extra={"queue": config.queue_name, "redis": config.redis_addr})
+    shutdown = _ShutdownFlag()
+    signal.signal(signal.SIGTERM, shutdown.request)
+    signal.signal(signal.SIGINT, shutdown.request)
 
-    while True:
+    logger.info(
+        "worker loop started",
+        extra={"queue": config.queue_name, "redis": config.redis_addr, "storage_backend": config.storage_backend},
+    )
+
+    while not shutdown.requested:
         message: IngestionJobMessage | None = None
         try:
             message = queue_consumer.pop()
@@ -147,6 +170,8 @@ def main() -> None:
                     extra=message.to_log_payload() if message is not None else {},
                 )
             time.sleep(config.poll_interval_seconds)
+
+    logger.info("worker stopped cleanly")
 
 
 if __name__ == "__main__":

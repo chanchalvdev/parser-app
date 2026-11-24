@@ -154,6 +154,7 @@
                   "upload_id": "d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a",
                   "object_key": "uploads/11111111-1111-1111-1111-111111111001/d3ef1ac4-2f4f-4d8d-95d5-a7f3f5a8eb4a/sample.zip",
                   "upload_url": "https://minio.local/upload-presigned-url",
+                  "upload_headers": {},
                   "expires_in_seconds": 3600
                 }
               }
@@ -1093,6 +1094,11 @@
           "upload_id": {"type": "string", "format": "uuid"},
           "object_key": {"type": "string"},
           "upload_url": {"type": "string", "format": "uri"},
+          "upload_headers": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": "Headers the client must send with the PUT to upload_url. Empty for MinIO/S3; {\"x-ms-blob-type\": \"BlockBlob\"} for Azure Blob."
+          },
           "expires_in_seconds": {"type": "integer"}
         }
       },

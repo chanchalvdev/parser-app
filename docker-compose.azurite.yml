@@ -1,0 +1,37 @@
+# Run the local stack against Azure Blob Storage semantics, using Azurite (Microsoft's
+# official Blob emulator) instead of MinIO. Exercises exactly the code path Azure uses:
+# SAS upload URLs, x-ms-blob-type headers, and the azure-storage-blob worker client.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.azurite.yml up -d --build
+#   make e2e-upload
+#
+# Account name/key below are Azurite's public, well-known development credentials.
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.38.0
+    container_name: file-platform-azurite
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000", "--skipApiVersionCheck", "--loose"]
+    ports:
+      - "10000:10000"
+
+  api:
+    environment:
+      STORAGE_BACKEND: azure
+      AZURE_STORAGE_ACCOUNT: devstoreaccount1
+      AZURE_STORAGE_KEY: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+      AZURE_STORAGE_ENDPOINT: http://azurite:10000/devstoreaccount1
+      # The browser / e2e script reach Azurite on the host port, not the compose hostname.
+      AZURE_STORAGE_PUBLIC_ENDPOINT: http://localhost:10000
+    depends_on:
+      azurite:
+        condition: service_started
+
+  worker:
+    environment:
+      STORAGE_BACKEND: azure
+      AZURE_STORAGE_ACCOUNT: devstoreaccount1
+      AZURE_STORAGE_KEY: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+      AZURE_STORAGE_ENDPOINT: http://azurite:10000/devstoreaccount1
+    depends_on:
+      azurite:
+        condition: service_started

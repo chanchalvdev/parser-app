@@ -30,7 +30,7 @@ from app.loaders import (
     SearchIndexLoader,
 )
 from app.secrets import PasswordSecretProvider, LocalArchivePasswordSecretProvider
-from app.storage.minio_client import MinioClient
+from app.storage.base import ObjectStorage
 
 
 UNKNOWN_UPLOAD_FALLBACK = "unknown-upload"
@@ -90,7 +90,7 @@ class IngestionOrchestrator:
     def __init__(
         self,
         repository: WorkerRepository,
-        storage: MinioClient,
+        storage: ObjectStorage,
         logger: logging.Logger,
         temp_directory: str | None = None,
         archive_extractor: ArchiveExtractor | None = None,
